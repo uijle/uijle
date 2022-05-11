@@ -1,8 +1,8 @@
 ###################################################################################################
 #
-# Doel script: Pati?ntselectie en voorbereiding data
+# Doel script: Patiëntselectie en voorbereiding data
 # Aandoening: Kwetsbare Ouderen
-# Output: Pati?ntselectie en databronnen
+# Output: Patiëntselectie en databronnen
 # Auteur: Jacco Westeneng en Cornelieke van Steenbeek
 # Datum: 20-04-2021
 # Versie: 1
@@ -117,9 +117,9 @@ load("Metingen")
 
 Metingen <- Metingen %>% 
   transmute(PatientNr = as.character(PatientNr),
-            ObservatieOmschrijving = as.character(MetingtypeCode),
-            ObservatieDatum = as.Date(Antwoorddatum),
-            Uitslag = as.character(AntwoordAsDecimal),
+            ObservatieOmschrijving = as.character(ObservatieOmschrijving),
+            ObservatieDatum = as.Date(ObservatieDatum),
+            Uitslag = as.character(Uitslag),
             Eenheid = as.character(Eenheid))
 
 load("Medicatie")
@@ -219,8 +219,7 @@ ScreeningVal <- Vragenlijst %>%
          Vraagstelling == "Valrisico score") %>% 
   mutate(ValTijd = difftime(BeantwoordingsDatum, OpnameDatumTijd, units = "days"),
          ValRisico = ifelse(AntwoordGetal == 1, 1, 0)) %>% # Screeningsuitkomst bij val is 1 of 0
-  #filter(ValTijd >= 0,
-  #       ValTijd <= 2) %>% 
+  filter(BeantwoordingsDatum <= OntslagDatumTijd) %>% 
   group_by(OpnameNr) %>% 
             arrange(abs(ValTijd)) %>%             
             mutate(seq=row_number()) %>% 
@@ -237,8 +236,7 @@ ScreeningDelier <- Vragenlijst %>%
          Vraagstelling == "Delier score") %>% 
   mutate(DelierTijd = difftime(BeantwoordingsDatum, OpnameDatumTijd, units = "days"),
          DelierRisico = ifelse(AntwoordGetal >= 1, 1, 0)) %>%
-  #filter(DelierTijd >= 0,
-  #       DelierTijd <= 2) %>% 
+  filter(BeantwoordingsDatum <= OntslagDatumTijd) %>% 
   group_by(OpnameNr) %>% 
             arrange(abs(DelierTijd)) %>% 
             mutate(seq=row_number()) %>% 
@@ -255,8 +253,7 @@ ScreeningFysiek <- Vragenlijst %>%
          Vraagstelling == "Katz-ADL score") %>% 
   mutate(FysiekTijd = difftime(BeantwoordingsDatum, OpnameDatumTijd, units = "days"),
          FysiekRisico = ifelse(AntwoordGetal >= 2, 1, 0)) %>%
-  #filter(FysiekTijd >= 0,
-  #       FysiekTijd <= 2) %>% 
+  filter(BeantwoordingsDatum <= OntslagDatumTijd) %>% 
   group_by(OpnameNr) %>% 
             arrange(abs(FysiekTijd)) %>% 
             mutate(seq=row_number()) %>% 
@@ -273,8 +270,7 @@ ScreeningOndervoed <- Vragenlijst %>%
          Vraagstelling == "SNAQ score") %>% #Of MUST score >= 1
   mutate(OndervoedTijd = difftime(BeantwoordingsDatum, OpnameDatumTijd, units = "days"),
          OndervoedRisico = ifelse(AntwoordGetal >= 2, 1, 0)) %>%
-  #filter(OndervoedTijd >= 0,
-  #       OndervoedTijd <= 2) %>% 
+  filter(BeantwoordingsDatum <= OntslagDatumTijd) %>% 
   group_by(OpnameNr) %>% 
             arrange(abs(OndervoedTijd)) %>% 
             mutate(seq=row_number()) %>% 
@@ -307,7 +303,10 @@ PatSel <- SelectieOpnameLeeftijd %>%
   # Opnames aanmerken als primair door een 1, anders 0
   mutate(PrimaireOpname = ifelse(OpnameDatumTijd == PrimaireOpnameDatum, 1, 0)) %>% 
   
-  # Variabelen in Pati?ntselectie
+  # Filter op primaire opnames
+  filter(PrimaireOpname == 1) %>% 
+  
+  # Variabelen in Patiëntselectie
   distinct(PatientNr,
            OpnameNr,
            LeeftijdOpname,
@@ -322,3 +321,5 @@ PatSel <- SelectieOpnameLeeftijd %>%
            OndervoedRisico,
            OndervoedTijd,
            TotaalPos)
+
+save(PatSel, file = "Patientselectie")

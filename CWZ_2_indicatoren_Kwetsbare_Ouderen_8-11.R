@@ -59,7 +59,8 @@ ZA_psych           <- c("194152", "194164" , "194163" , "194162" , "194166", "19
  ZA_Ergotherapeut        <- c("193012" , "192948" )
  ZA_Logopedist        <- c("192979" , "193021" , "193085" , "699824","198207","198205")
 # 
-ZA_Maatschappelijk        <- c("699821" , "198208" , "699825" , "699824","198207","198205")
+ZA_Maatschappelijk        <- c("699821" , "198208" , "699825" , "699824","198207","198205","699822","699823","699826","699827",
+                               "699828","699820","697401")
 Delier_MED          <- c("N05AD01", "N05AH02", "N05AH03","N05AH04", "N05AX08")
 DBC_CHI          <- c("218", "219","3019", "3020")     #let op: Interne heeft ook een DBC 218, dit is iets heel anders
 DBC_ORT          <- c("3019", "3020") 
@@ -407,19 +408,19 @@ opnamespec         <- RedenOpname %>% mutate( Ind    = "opnspec",
   select( Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor) 
 
 table(opnamespec$Waarde,opnamespec$Cyclus)
-###~~~~~~~~~~~~~~U1 ~~~~~~~~~~~~###
-TOPIC <- left_join(PatSel %>% select(PatientNr, Aandoening, Cyclus, Wegingsfactor,OntslagDatumTijd),
-                   Vragenlijst %>% filter(Vragenlijstnaam=="TOPICS-SF") %>% distinct(PatientNr,Beantwoordingsdatum)) %>% 
-        mutate(TijdOntslagTopic=as.numeric(difftime(Beantwoordingsdatum,OntslagDatumTijd,units="weeks"))/52)
-
-U11        <- TOPIC %>% 
-                 mutate(Waarde=ifelse(!is.na(TijdOntslagTopic),1,0),
-                        Groep  = scorekaart_name,
-                        Ind="U1.1") %>% 
-                 select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
+# ###~~~~~~~~~~~~~~U1 ~~~~~~~~~~~~###
+# TOPIC <- left_join(PatSel %>% select(PatientNr, Aandoening, Cyclus, Wegingsfactor,OntslagDatumTijd),
+#                    Vragenlijst %>% filter(Vragenlijstnaam=="TOPICS-SF") %>% distinct(PatientNr,Beantwoordingsdatum)) %>% 
+#         mutate(TijdOntslagTopic=as.numeric(difftime(Beantwoordingsdatum,OntslagDatumTijd,units="weeks"))/52)
+# 
+# U11        <- TOPIC %>% 
+#                  mutate(Waarde=ifelse(!is.na(TijdOntslagTopic),1,0),
+#                         Groep  = scorekaart_name,
+#                         Ind="U1.1") %>% 
+#                  select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
 
                  
-table(U11$Waarde,U11$Cyclus)
+# table(U11$Waarde,U11$Cyclus)
 ###~~~~~~~~~~~~~~overleving ~~~~~~~~~~~~###
 
 overleving  <- left_join(PatSel,
@@ -475,8 +476,30 @@ U22 <- AantalSEH %>%
               select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
 
 table(U22$Waarde, U22$Cyclus)
+
+U22 %>% 
+  group_by(Cyclus) %>% 
+  summarize(teller=sum(Waarde),
+            Noemer=sum(Wegingsfactor),
+            gemid=mean(Waarde),
+            mini=min(Waarde),
+            q5 = quantile(Waarde, 0.05),
+            q1 = quantile(Waarde, 0.25),
+            q3 = quantile(Waarde, 0.75),
+            q95 = quantile(Waarde, 0.95),
+            maxi=max(Waarde))
 ### volgende cyclus noemer alleen seh ptn?
-                     
+  #  U22 %>% filter(Waarde>0) %>% 
+  # group_by(Cyclus) %>% 
+  # summarize(teller=sum(Waarde),
+  #           Noemer=sum(Wegingsfactor),
+  #           gemid=mean(Waarde),
+  #           mini=min(Waarde),
+  #           q5 = quantile(Waarde, 0.05),
+  #           q1 = quantile(Waarde, 0.25),
+  #           q3 = quantile(Waarde, 0.75),
+  #           q95 = quantile(Waarde, 0.95),
+  #           maxi=max(Waarde))                  
 
 spoed_heropn <- left_join (PatSel %>% select(PatientNr, OpnameNr, Aandoening, Cyclus, Wegingsfactor,OntslagDatumTijd),
                            Opname %>%    mutate (HeropDat = as.Date(OpnameDatumTijd, format = "%Y-%m-%d"),
@@ -527,6 +550,8 @@ overleving  <- left_join(PatSel,
             overleden  = difftime(OverlijdensDatum, OntslagDatum, units = "days"),
           overl30    = ifelse(overleden>0 & overleden <=30, 1, 0),
           overl90    = ifelse(overleden>0 & overleden <=90, 1, 0),
+          overl180    = ifelse(overleden>0 & overleden <=180, 1, 0),
+          overl365    = ifelse(overleden>0 & overleden <=365, 1, 0),
           zkhmort    = ifelse(OverlijdensDatum<=OntslagDatum & OverlijdensDatum>=OpnameDatumTijd , 1, 0))
 
 
@@ -558,6 +583,26 @@ U33       <- overleving %>%
   select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor) 
 
 table(U33$Waarde,U33$Cyclus)
+
+# --- U32 Overleving 180dgn ----- noemer alleen cyclus 0 en 1?
+U34       <- overleving %>% 
+          filter(OpnameNr%in%noemerselectieFU$OpnameNr) %>% 
+  mutate (Ind    = "U3.4",
+                        Groep  = scorekaart_name,
+          Waarde = overl180) %>%
+  select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor) 
+
+table(U34$Waarde,U34$Cyclus)
+
+# --- U32 Overleving 365 dgn ----- Noemer alleen Cyclus 0?
+U35       <- overleving %>% 
+          filter(OpnameNr%in%noemerselectieFU$OpnameNr) %>% 
+  mutate (Ind    = "U3.5",
+                        Groep  = scorekaart_name,
+          Waarde = overl365) %>%
+  select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor) 
+
+table(U35$Waarde,U35$Cyclus)
 
 # --- U4 Complicaties -----
 
@@ -686,6 +731,15 @@ U412c <- left_join(PatSel %>% select(PatientNr,Cyclus,DelierRisico),
 
 table(U412c$Waarde, U412c$Cyclus)
 
+U412d <- left_join(PatSel %>% select(PatientNr,Cyclus, DelierRisico),
+                  U41d ) %>% 
+  filter(DelierRisico==0) %>% 
+  select(-DelierRisico) %>% 
+  mutate (Ind    = "U4.1.2d")
+
+table(U412d$Waarde, U412d$Cyclus)
+
+
 U412f <- left_join(PatSel %>% select(PatientNr,Cyclus,DelierRisico),
                   U41f ) %>% 
   filter(DelierRisico==0) %>% 
@@ -694,13 +748,6 @@ U412f <- left_join(PatSel %>% select(PatientNr,Cyclus,DelierRisico),
 
 table(U412f$Waarde, U412f$Cyclus)
 
-U412d <- left_join(PatSel %>% select(PatientNr,Cyclus, DelierRisico),
-                  U41d ) %>% 
-  filter(DelierRisico==0) %>% 
-  select(-DelierRisico) %>% 
-  mutate (Ind    = "U4.1.2d")
-
-table(U412d$Waarde, U412d$Cyclus)
 
 U413c <- left_join(PatSel %>% select(PatientNr,Cyclus, DelierTijd),
                   U41c ) %>% 
@@ -1223,8 +1270,8 @@ K42 %>%
             maxi=max(Waarde)) 
 
 # ---------- P.1.1 Percentage patienten dat is binnengekomen via de SEH  ----------    
-Patsel2 <- left_join(PatSel,
-                     Opname3)
+
+
 SEHtest <- left_join(PatSel,
                      SEH %>% select(PatientNr, TijdsduurSehBezoek, OpnameNr) )
           
@@ -1349,12 +1396,12 @@ P34          <- PatSel %>%
 ###-------------------------------------------------------------------------------------------------------
 ###----------------------------------- P4 Betrokken specialisten -----------------------------------------------------
 ###-------------------------------------------------------------------------------------------------------
-################TOT HIER GEKOMEN
+
 ##### Medebehandeling Collumfractuur
         
 HeupDBC <- Subtraject %>% filter(DiagnoseCode %in% DBC_CHI & AGB_Code != "INT") %>% 
-              left_join(Verrichting %>% filter (OpnameNr!="<< Onbekend >>" ) %>%  select(OpnameNr,SubTrajectNr)) %>% filter (!is.na(OpnameNr)) %>% 
-              distinct(OpnameNr,SubTrajectNr,.keep_all=TRUE)
+              left_join(Verrichting %>% filter (OpnameNr!="<< Onbekend >>" ) %>%  select(OpnameNr,SubtrajectNr)) %>% filter (!is.na(OpnameNr)) %>% 
+              distinct(OpnameNr,SubtrajectNr,.keep_all=TRUE)
 
       
 PatselHeup <- PatSel %>% mutate(Heup=ifelse(OpnameNr %in% HeupDBC$OpnameNr,1,0))
@@ -1362,9 +1409,9 @@ PatselHeup <- PatSel %>% mutate(Heup=ifelse(OpnameNr %in% HeupDBC$OpnameNr,1,0))
 table(PatselHeup$Heup)
 ## Polibezoeken, tel consulten en SEH 
 medeconsulten <- left_join(PatselHeup,
-          Verrichting %>% select(PatientNr,Verrichtingdatum,ZACode,AGB_CodeUitvoerder,DeclaratieOmschrijving) %>%
+          Verrichting %>% select(PatientNr,Verrichtingdatum,ZACode,AGB_CodeUitvoerder,ZAOmschrijving) %>%
                       filter(ZACode %in% ZA_medeConsult &  AGB_CodeUitvoerder=="GER")) %>% ##### in het CWZ geen internist ouderengeneeskunde, zelf toevoegen indien aanwezig!!!!
-          mutate(Consult=ifelse(Verrichtingdatum>=OpnameDatum & Verrichtingdatum<=OntslagDatum,1,0 )) %>% 
+          mutate(Consult=ifelse(Verrichtingdatum>=OpnameDatumTijd & Verrichtingdatum<=OntslagDatumTijd,1,0 )) %>% 
           group_by(OpnameNr) %>% 
           mutate(Aantal=sum(Consult)) %>% 
           ungroup() %>% distinct(OpnameNr,.keep_all=TRUE)
@@ -1377,7 +1424,7 @@ P41  <- medeconsulten  %>%
                         select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
                       summary(P41$Waarde)
                       sum(P41$Waarde) 
-table(P41$Waarde)
+table(P41$Waarde,P41$Cyclus)
 
 P411  <- medeconsulten  %>% filter(Heup==1) %>% 
                       mutate(     Waarde = ifelse(is.na(Consult),0,Consult),
@@ -1385,30 +1432,30 @@ P411  <- medeconsulten  %>% filter(Heup==1) %>%
                                   Ind    = "P4.1.1",
                                   Wegingsfactor = 1) %>%
                         select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
-table(P411$Waarde)
+table(P411$Waarde,P411$Cyclus)
                       
-P412 <- left_join(medeconsulten %>% select (PatientNr,Aantal,Consult),U41d) %>% 
-          mutate(Wegingsfactor=Waarde) %>% filter(Wegingsfactor==1) %>% 
-           mutate(     Waarde = ifelse(is.na(Consult),0,Consult),
-                        Groep  = scorekaart_name,
-                                  Ind    = "P4.1.2") %>%
-                        ungroup() %>% 
-                        select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
-table(P412$Waarde)
+# P412 <- left_join(medeconsulten %>% select (PatientNr,Aantal,Consult),U41d) %>% 
+#           mutate(Wegingsfactor=Waarde) %>% filter(Wegingsfactor==1) %>% 
+#            mutate(     Waarde = ifelse(is.na(Consult),0,Consult),
+#                         Groep  = scorekaart_name,
+#                                   Ind    = "P4.1.2") %>%
+#                         ungroup() %>% 
+#                         select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
+# table(P412$Waarde)
 
                       
 medeconsultensp <- left_join(PatSel ,
-                               Verrichting %>% select(PatientNr,Verrichtingdatum,ZACode,AGB_CodeUitvoerder,DeclaratieOmschrijving) %>%
+                               Verrichting %>% select(PatientNr,Verrichtingdatum,ZACode,AGB_CodeUitvoerder,ZAOmschrijving) %>%
                        filter( AGB_CodeUitvoerder=="GER")) %>% ##### in het CWZ geen internist ouderengeneeskunde, zelf toevoegen indien aanwezig!!!!
-           mutate(Consult=ifelse(Verrichtingdatum>=OpnameDatum & Verrichtingdatum<=OntslagDatum,1,0 )) %>% 
+           mutate(Consult=ifelse(Verrichtingdatum>=OpnameDatumTijd & Verrichtingdatum<=OntslagDatumTijd,1,0 )) %>% 
                         group_by(OpnameNr) %>% 
           mutate(Aantal=sum(Consult)) %>% 
           ungroup() %>% distinct(OpnameNr,.keep_all=TRUE)
     
-Verrichting_P4  <- left_join(PatSel %>% select(PatientNr, Aandoening, Cyclus,  OpnameDatum, OntslagDatum,
+Verrichting_P4  <- left_join(PatSel %>% select(PatientNr, Aandoening, Cyclus,  OpnameDatumTijd, OntslagDatumTijd,
                                                    DelierRisico,OndervoedRisico,ValRisico,FysiekRisico),
-                               Verrichting %>% select(PatientNr, ZACode, Verrichtingdatum, DeclaratieOmschrijving)) %>%
-                                 filter(     Verrichtingdatum>=OpnameDatum & Verrichtingdatum<=OntslagDatum) %>% 
+                               Verrichting %>% select(PatientNr, ZACode, Verrichtingdatum, ZAOmschrijving)) %>%
+                                 filter(     Verrichtingdatum>=OpnameDatumTijd & Verrichtingdatum<=OntslagDatumTijd) %>% 
                       filter(  (  ZACode %in% ZA_Fysiotherapeut)|(    ZACode %in% ZA_Ergotherapeut)|(    ZACode %in% ZA_Dietist ) |(    ZACode %in% ZA_Logopedist )|
                                          (    ZACode %in% ZA_psych) |(    ZACode %in% ZA_Maatschappelijk ))%>%
                       distinct(PatientNr,ZACode, .keep_all=TRUE) %>% 
@@ -1422,7 +1469,7 @@ Verrichting_P4  <- left_join(PatSel %>% select(PatientNr, Aandoening, Cyclus,  O
 # ---------- P4.2 Psychosociale contacten tijdens opname  ----------
 P421    <- left_join(PatSel, 
                       Verrichting_P4 %>%
-                      group_by(   PatientNr) %>%
+                      group_by(   PatientNr,Cyclus) %>%
                       filter(maat==1) %>% 
                       mutate(  Waarde = sum(maat)) %>%
                       distinct(PatientNr, Waarde)) %>% 
@@ -1434,10 +1481,22 @@ P421    <- left_join(PatSel,
                         select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
                       summary(P421$Waarde)
                       sum(P421$Waarde)
-table(P421$Waarde)                      
+P421 %>% 
+  group_by(Cyclus) %>% 
+  summarize(med=median(Waarde),
+            teller=sum(Waarde),
+            Noemer=sum(Wegingsfactor),
+            gemid=mean(Waarde),
+            mini=min(Waarde),
+            q5 = quantile(Waarde, 0.05),
+            q1 = quantile(Waarde, 0.25),
+            q3 = quantile(Waarde, 0.75),
+            q95 = quantile(Waarde, 0.95),
+            maxi=max(Waarde))                  
+
 P422    <- left_join(PatSel, 
                       Verrichting_P4 %>%
-                      group_by(   PatientNr) %>%
+                      group_by(   PatientNr,Cyclus) %>%
                       filter(psy==1) %>% 
                       mutate(  Waarde = sum(psy)) %>%
                       distinct(PatientNr, Waarde)) %>% 
@@ -1447,13 +1506,23 @@ P422    <- left_join(PatSel,
                                   Wegingsfactor = 1) %>%
                         ungroup() %>% 
                         select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
-                      summary(P422$Waarde)
-                      sum(P422$Waarde)
-                      
-# ---------- P4.3 Paramedisch contacten tijdens opname  ----------
+
+P422 %>% 
+  group_by(Cyclus) %>% 
+  summarize(med=median(Waarde),
+            teller=sum(Waarde),
+            Noemer=sum(Wegingsfactor),
+            gemid=mean(Waarde),
+            mini=min(Waarde),
+            q5 = quantile(Waarde, 0.05),
+            q1 = quantile(Waarde, 0.25),
+            q3 = quantile(Waarde, 0.75),
+            q95 = quantile(Waarde, 0.95),
+            maxi=max(Waarde))                  
+#### ---------- P4.3 Paramedisch contacten tijdens opname  ----------
 P431    <- left_join(PatSel, 
                       Verrichting_P4 %>%
-                      group_by(   PatientNr) %>%
+                      group_by(   PatientNr,Cyclus) %>%
                       filter(fys==1) %>% 
                       mutate(  Waarde = sum(fys)) %>%
                       distinct(PatientNr, Waarde)) %>% 
@@ -1463,12 +1532,22 @@ P431    <- left_join(PatSel,
                                   Wegingsfactor = 1) %>%
                         ungroup() %>% 
                         select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
-                      summary(P431$Waarde)
-                      sum(P431$Waarde)
-                      table(P431$Waarde)
+P431 %>% 
+  group_by(Cyclus) %>% 
+  summarize(med=median(Waarde),
+            teller=sum(Waarde),
+            Noemer=sum(Wegingsfactor),
+            gemid=mean(Waarde),
+            mini=min(Waarde),
+            q5 = quantile(Waarde, 0.05),
+            q1 = quantile(Waarde, 0.25),
+            q3 = quantile(Waarde, 0.75),
+            q95 = quantile(Waarde, 0.95),
+            maxi=max(Waarde))                  
+
 P432    <- left_join(PatSel, 
                       Verrichting_P4 %>%
-                      group_by(   PatientNr) %>%
+                      group_by(   PatientNr,Cyclus) %>%
                       filter(ergo==1) %>% 
                       mutate(  Waarde = sum(ergo)) %>%
                       distinct(PatientNr, Waarde)) %>% 
@@ -1478,12 +1557,23 @@ P432    <- left_join(PatSel,
                                   Wegingsfactor = 1) %>%
                         ungroup() %>% 
                         select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
-                      summary(P432$Waarde)
-                      sum(P432$Waarde)                      
+
+P432 %>% 
+  group_by(Cyclus) %>% 
+  summarize(med=median(Waarde),
+            teller=sum(Waarde),
+            Noemer=sum(Wegingsfactor),
+            gemid=mean(Waarde),
+            mini=min(Waarde),
+            q5 = quantile(Waarde, 0.05),
+            q1 = quantile(Waarde, 0.25),
+            q3 = quantile(Waarde, 0.75),
+            q95 = quantile(Waarde, 0.95),
+            maxi=max(Waarde))                                               
                       
 P433    <- left_join(PatSel, 
                       Verrichting_P4 %>%
-                      group_by(   PatientNr) %>%
+                      group_by(   PatientNr,Cyclus) %>%
                       filter(logo==1) %>% 
                       mutate(  Waarde = sum(logo)) %>%
                       distinct(PatientNr, Waarde)) %>% 
@@ -1493,12 +1583,23 @@ P433    <- left_join(PatSel,
                                   Wegingsfactor = 1) %>%
                         ungroup() %>% 
                         select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
-                      summary(P433$Waarde)
-                      sum(P433$Waarde)
+
+P433 %>% 
+  group_by(Cyclus) %>% 
+  summarize(med=median(Waarde),
+            teller=sum(Waarde),
+            Noemer=sum(Wegingsfactor),
+            gemid=mean(Waarde),
+            mini=min(Waarde),
+            q5 = quantile(Waarde, 0.05),
+            q1 = quantile(Waarde, 0.25),
+            q3 = quantile(Waarde, 0.75),
+            q95 = quantile(Waarde, 0.95),
+            maxi=max(Waarde))         
                       
 P434    <- left_join(PatSel, 
                       Verrichting_P4 %>%
-                      group_by(   PatientNr) %>%
+                      group_by(   PatientNr,Cyclus) %>%
                       filter(diet==1) %>% 
                       mutate(  Waarde = sum(diet)) %>%
                       distinct(PatientNr, Waarde)) %>% 
@@ -1508,16 +1609,29 @@ P434    <- left_join(PatSel,
                                   Wegingsfactor = 1) %>%
                         ungroup() %>% 
                         select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
-                      summary(P434$Waarde)
-                      sum(P434$Waarde)                                            
+ 
+P434%>% 
+  group_by(Cyclus) %>% 
+  summarize(med=median(Waarde),
+            teller=sum(Waarde),
+            Noemer=sum(Wegingsfactor),
+            gemid=mean(Waarde),
+            mini=min(Waarde),
+            q5 = quantile(Waarde, 0.05),
+            q1 = quantile(Waarde, 0.25),
+            q3 = quantile(Waarde, 0.75),
+            q95 = quantile(Waarde, 0.95),
+            maxi=max(Waarde))              
+
+#### P42 lukt nog niet: hier staat DUMMY GERIATRIE PSYCHIATRISCH
 ###-------------------------------------------------------------------------------------------------------
 ###----------------------------------- P6 Ingezette behandeling-------------------------------------------
 ###-------------------------------------------------------------------------------------------------------
-DOSP         <- left_join(PatSel %>% select(Aandoening, Cyclus, PatientNr,OntslagDatum,OpnameDatum),
+DOSP         <- left_join(PatSel %>% select(Aandoening, Cyclus, PatientNr,OntslagDatumTijd,OpnameDatumTijd),
                          Vragenlijst %>% filter (Vraagstelling=="DOS schaal eindscore" ) %>% select(PatientNr,Beantwoordingsdatum, Antwoord)) %>% 
-  mutate(Waarde =ifelse(Beantwoordingsdatum<=OntslagDatum & Beantwoordingsdatum>=OpnameDatum,1,0)) %>% 
+  mutate(Waarde =ifelse(Beantwoordingsdatum<=OntslagDatumTijd & Beantwoordingsdatum>=OpnameDatumTijd,1,0)) %>% 
   filter(Waarde==1) %>% 
-  distinct( PatientNr,.keep_all=TRUE)
+  distinct( PatientNr,Cyclus,.keep_all=TRUE)
  
 P61 <- left_join(PatSel,
                     DOSP) %>% 
@@ -1527,7 +1641,7 @@ P61 <- left_join(PatSel,
           Wegingsfactor= 1) %>%
   select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor) %>% ungroup()
 
-table(P61$Waarde, P61$Groep)
+table(P61$Waarde, P61$Cyclus)
 
 P641 <- left_join(PatSel,
                     DOSP) %>% 
@@ -1537,11 +1651,11 @@ P641 <- left_join(PatSel,
           Waarde = ifelse( is.na(Waarde), 0, Waarde),
           Wegingsfactor= 1) %>%
   select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor) %>% ungroup()
-table(P641$Waarde, P641$Groep)
+table(P641$Waarde, P641$Cyclus)
 # ---------- P4.3 Paramedisch contacten tijdens opname  ----------
 P642    <- left_join(PatSel %>% filter(FysiekRisico==1), 
                       Verrichting_P4 %>%
-                      group_by(   PatientNr) %>%
+                      group_by(   PatientNr,Cyclus) %>%
                       filter((fys==1)|(ergo==1)) %>% 
                       mutate(  Waarde = sum(fys)+sum(ergo)) %>%
                       distinct(PatientNr, Waarde)) %>% 
@@ -1552,11 +1666,11 @@ P642    <- left_join(PatSel %>% filter(FysiekRisico==1),
                         ungroup() %>% 
                         select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
 
-table(P642$Waarde)
+table(P642$Waarde,P642$Cyclus)
                      
 P643   <- left_join(PatSel %>% filter(OndervoedRisico==1), 
                       Verrichting_P4 %>%
-                      group_by(   PatientNr) %>%
+                      group_by(   PatientNr,Cyclus) %>%
                       filter(diet==1) %>% 
                       mutate(  Waarde = sum(diet)) %>%
                       distinct(PatientNr, Waarde)) %>% 
@@ -1567,11 +1681,11 @@ P643   <- left_join(PatSel %>% filter(OndervoedRisico==1),
                         ungroup() %>% 
                         select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
  
-table(P643$Waarde)
+table(P643$Waarde,P643$Cyclus)
 
 P644    <- left_join(PatSel %>% filter(ValRisico==1), 
                       Verrichting_P4 %>%
-                      group_by(   PatientNr) %>%
+                      group_by(   PatientNr,Cyclus) %>%
                       filter(fys==1) %>% 
                       mutate(  Waarde = sum(fys)) %>%
                       distinct(PatientNr, Waarde)) %>% 
@@ -1582,9 +1696,9 @@ P644    <- left_join(PatSel %>% filter(ValRisico==1),
                         ungroup() %>% 
                         select (Aandoening, Groep, Cyclus, PatientNr, Ind, Waarde, Wegingsfactor)
 
-table(P644$Waarde)
+table(P644$Waarde,P644$Cyclus)
                      
-
+################TOT HIER GEKOMEN
  indicatoren       <-    rbind(U11,U21,U22,U23,U24,U31,U32,U33,U41c,
                                U411c,U411d,U412c,U41d,U412d,
                                U413c,U413d,U42,U421,U422,U423,U43,U44,U51,U61,K11,K12,K13,K14,

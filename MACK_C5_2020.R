@@ -17,24 +17,23 @@ library(lubridate)    # Voor easy date manipulation
 library(tidyr)
 library(openxlsx)
 
-startwindow  <- as.Date("2020-01-01", format ="%Y-%m-%d")
-stopwindow   <- as.Date("2021-03-31", format ="%Y-%m-%d")
+startwindow  <- as.Date("2021-01-01", format ="%Y-%m-%d")
+stopwindow   <- as.Date("2022-03-31", format ="%Y-%m-%d")
 Cyclus_nr    <- 5
-Cyclus_jaar  <- 2020
 
 
 CTG_verrichtingen <- c("190157", "190158")
 
 ########## INLEZEN VOEDSELPROVOCATIE DATA EN PATIENTSELECTIE ########## 
 
-#alle patienten in 2020
+#alle patienten in 2021
 pat_nrs    <- read.csv("2304 0916 VBHC MACK Agenda afspraken.csv",header=T, sep=";", dec=",", stringsAsFactors = F, na.strings="", quote="", fileEncoding = "latin1") %>%
   mutate(PatientNr = as.character(patientnr),
          datum = as.Date(datum, format = "%d-%m-%Y")) %>%
-  filter(datum >= "2020-01-01" & datum <= "2020-12-31" &
-           code %in% c("APNW", "PPC", "NP-19", "NPOLIB40")) %>% # 505 unieke patienten 
+  filter(datum >= "2021-01-01" & datum <= "2021-12-31" &
+           code %in% c("APNW", "PPC", "NP-19", "NPOLIB40")) %>% # 521 unieke patienten
   distinct(PatientNr, code)
-table(pat_nrs$code) #alle patienten met APNW of PPC in 2020
+table(pat_nrs$code) #alle patienten met APNW of PPC in 2021
 length(unique(pat_nrs$PatientNr))
 
 vp_raw1 <- read.csv("Provocatietest MACK 20230413.csv",header=T, sep=";", dec=",", stringsAsFactors = F, na.strings="", quote="", fileEncoding = "latin1")
@@ -73,8 +72,10 @@ vp <- vp_raw %>% mutate(PatientNr = as.character(PatientNr),
                         Geboortedatum = as.Date(geboortedatum, format="%d-%m-%Y"),
                         #Datum = as.Date(Datum,format="%d-%m-%Y"),
                         Datum.provocatie = ifelse(!is.na(`Datum provocatie`), `Datum provocatie`, Datum),
-                        Datum.provocatie = as.Date(Datum.provocatie, format="%Y-%m-%d"),
-                        Provocatie.dag.1 = as.Date(`Datum provocatie dag 1`, format="%Y-%m-%d"),
+                        Datum.provocatie = as.Date(Datum.provocatie, format="%d-%m-%Y"),
+                        Provocatie.dag.1 = ifelse(!is.na(`Datum provocatie dag 1`), `Datum provocatie dag 1`, `dag 1`),
+                        Provocatie.dag.1 = as.Date(Provocatie.dag.1,format="%Y-%m-%d"),
+                        Provocatie.dag.2 = ifelse(!is.na(`Datum provocatie dag 2`), `Datum provocatie dag 2`, `dag 2`),
                         Provocatie.dag.2 = as.Date(`Datum provocatie dag 2`,format="%Y-%m-%d"),
                         
                         #Provocatie open en blind goed registreren
@@ -107,19 +108,19 @@ vp <- vp_raw %>% mutate(PatientNr = as.character(PatientNr),
          provocatie.tarwe, provocatie.overig, Conclusie, Indien_conclusie_anders, Toelichting.conclusie)
 
 length(unique(pat_nrs$PatientNr)) #n= 734 pt met APNW, PPC of NP-19 code.
-length(unique(vp$PatientNr)) # n=291 met 457 voedselprovocatietesten
+length(unique(vp$PatientNr)) # n=294 met 484 voedselprovocatietesten
 
 
 # patient selectie
 pat_sel <- pat_nrs %>% filter(pat_nrs$PatientNr %in% vp$PatientNr) %>%
   distinct(PatientNr, .keep_all = TRUE)
-length(unique(pat_sel$PatientNr)) #n = 291
+length(unique(pat_sel$PatientNr)) #n = 294
 
-#write.table(pat_sel$PatientNr, file = "./patientselectie_C5_2020_VP.csv", sep = ";", row.names = F) 
+#write.table(pat_sel$PatientNr, file = "./patientselectie_C5_2021_VP.csv", sep = ";", row.names = F) 
 
-patsel_2019 <- read.csv("patientselectie_C5_2019_VP.csv",header=T, sep=";", dec=",", stringsAsFactors = F, na.strings="", quote="", fileEncoding = "latin1") %>%
+patsel_2020 <- read.csv("patientselectie_C5_2020_VP.csv",header=T, sep=";", dec=",", stringsAsFactors = F, na.strings="", quote="", fileEncoding = "latin1") %>%
   mutate(PatientNr = as.character(X.x.))
-Overlap_patienten <- semi_join(pat_sel, patsel_2019, by = "PatientNr")
+Overlap_patienten <- semi_join(pat_sel, patsel_2020, by = "PatientNr")
 pat_sel <- pat_sel %>% filter(!(PatientNr %in% Overlap_patienten$PatientNr))
 
 rm(Overlap_patienten)
@@ -153,7 +154,7 @@ startdat <- data_agenda %>% filter(CODE=="APNW" | CODE=="PPC" | CODE == "NPOLIB4
 #  distinct(PatientNr, Datum.provocatie, Provocatie.dag.1, Provocatie.dag.2, .keep_all = TRUE)
 
 
-  
+
 #overbodig? als datum.provocatie niet wordt gebruikt.
 #vp_test <- vp %>%
 #  mutate(Datum.provocatie=ifelse(is.na(Datum.provocatie),Datum.provocatie.1,
@@ -217,15 +218,15 @@ table(vp$Provocatie_blind)
 ## definieren provocatie overig
 vp <-  vp %>%
   mutate(blind_hazelnoot = ifelse((grepl(tolower("hazelnoot"), provocatie.overig, ignore.case=T) | grepl("hazrlnoot", provocatie.overig, ignore.case=T) |
-                                          Provocatie_blind == "hazelnoot"), 1, 0),
+                                     Provocatie_blind == "hazelnoot"), 1, 0),
          blind_cashew    = ifelse((grepl("cashew", provocatie.overig, ignore.case=T)| grepl("Cashew", provocatie.overig, ignore.case=T) |
                                      Provocatie_blind == "cashewnoot"), 1, 0),
          blind_walnoot   = ifelse((grepl("walnoot", provocatie.overig, ignore.case=T) |
-                                          Provocatie_blind == "walnoot"), 1, 0),
+                                     Provocatie_blind == "walnoot"), 1, 0),
          blind_sesam     = ifelse((grepl("sesam", provocatie.overig, ignore.case=T) |
-                                    Provocatie_blind == "sesam"), 1, 0),
+                                     Provocatie_blind == "sesam"), 1, 0),
          blind_amandel   = ifelse((grepl("amandel", provocatie.overig, ignore.case=T) | grepl("Amandel", provocatie.overig, ignore.case=T) |
-                                    Provocatie_blind == "amandel"), 1, 0)) %>%
+                                     Provocatie_blind == "amandel"), 1, 0)) %>%
   mutate_at(vars(open_amandel:blind_amandel),  replace_na, 0) %>% #NA aanpassen naar 0 zodat er met de variabelen gerekend kan worden
   mutate(blind_overig    = ifelse(dubbelblind==1 & blind_ei==0 & blind_melk==0 & blind_pinda==0 & blind_sesam==0 & blind_hazelnoot==0 & blind_cashew==0 & blind_walnoot==0 & blind_amandel==0, 1, 0))
 
@@ -256,7 +257,7 @@ table(vp$Conclusie) # andere conclusies getrokken
 
 
 # HIER GEBLEVEN 19-04-2023
-  
+
 #U1 uitgesplitst naar open, dubbelblind en dubbelblind zonder melk
 conc_zeker_open <- vp %>% filter(Provocatie == "open") %>%
   mutate(conc_zeker = ifelse(Conclusie %in% c("negatief", "positief"), 1, 0))
@@ -483,16 +484,12 @@ U3 <- data_epd %>%
 
 bron <-  bron %>% left_join(U3[,c("PatientNr","Waarde")], by="PatientNr")
 sum(bron$U3) #teller U3
-
 #----------------------- SCOREKAART KOSTEN --------------------- #
-#x <- data_agenda %>% filter(AGENDA_NAAM == "KINDERGENEESKUNDE" & grepl("arts", SUBAGENDA_OMS))
-#table(x$CODE)
-
 # K1 Polikliniekbezoeken en teleconsulten
 kinderarts_poli <- c("APNW", "ACP", "PPC")
-kinderarts_tele <- c("HPOLIB20", "TELSPR", "NPOLIB40", "NP-19")
+kinderarts_tele <- c("HPOLIB20", "TELSPR")
 dietist_polibezoeken <- c("ADN", "ADC", "PINDA&EI")
-dietist_telebezoeken <- c("TELP&EI", "TEL", "TELDALL", "TELNW", "DIEMAIL")
+dietist_telebezoeken <- c("TELP&EI", "TEL")
 
 consulten <- data_agenda %>%
   filter(PatientNr %in% pat_sel$PatientNr) %>%
@@ -504,7 +501,7 @@ consulten <- data_agenda %>%
   summarise(arts_poli = sum(arts_poli,na.rm=T), 
             arts_tele = sum(arts_tele,na.rm=T),
             dietist_poli = sum(dietist_poli,na.rm=T),
-            dietist_tele = sum(dietist_tele,na.rm=T)) %>%
+            dietist_tele = sum(dietist_tele,na.rm=T))%>%
   ungroup()
 
 x1 <- data_agenda %>% distinct(CODE, CODE_OMS)
@@ -522,7 +519,7 @@ summary(consulten$dietist_tele)
 
 kosten_in_excel_format <- function(indicator, column){
   kosten <- consulten %>% mutate(Aandoening = "MACK",
-                                 Cyclus = Cyclus_jaar,
+                                 Cyclus = 2020,
                                  Groep = "Voedselprovocatie",
                                  Wegingsfactor = 1,
                                  Ind = indicator,
@@ -569,7 +566,7 @@ table(proces_indicatoren$melk0tot1)
 
 p_indicatoren <- function(noemer,  indicator, column){
   proces <- noemer %>% mutate(Aandoening = "MACK",
-                              Cyclus = Cyclus_jaar,
+                              Cyclus = 2020,
                               Groep = "Voedselprovocatie",
                               Wegingsfactor = 1,
                               Ind = indicator, 
@@ -635,5 +632,5 @@ P2.2 <- p_indicatoren(p22_noemer, "P2.2", p22_noemer$p22) #sum is 11772
 scorekaart <- rbind(U1, U3, K1.1, K1.2, K1.3, K1.4, P1, P1.1, P1.2, P2, P2.1, P2.2) 
 
 OutputDataSet     <- as.data.frame(rbind(case_mix, behandel_mix, scorekaart))
-save(OutputDataSet, file = "OutputDataSetMACK_C5.rda")
+save(OutputDataSet, file = "OutputDataSetMACK_C4.rda")
 write.table(OutputDataSet, file = "OutputDataSet_2020.csv", sep = ";", row.names = F)

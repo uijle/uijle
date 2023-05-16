@@ -17,25 +17,24 @@ library(lubridate)    # Voor easy date manipulation
 library(tidyr)
 library(openxlsx)
 
-startwindow  <- as.Date("2019-01-01", format ="%Y-%m-%d")
-stopwindow   <- as.Date("2020-03-31", format ="%Y-%m-%d")
+startwindow  <- as.Date("2022-01-01", format ="%Y-%m-%d")
+stopwindow   <- as.Date("2023-03-31", format ="%Y-%m-%d")
 Cyclus_nr    <- 5
-Cyclus_jaar  <- 2019
 
 
 CTG_verrichtingen <- c("190157", "190158")
 
 ########## INLEZEN VOEDSELPROVOCATIE DATA EN PATIENTSELECTIE ########## 
 
-#alle patienten in 2019
+#alle patienten in 2022
 pat_nrs    <- read.csv("2304 0916 VBHC MACK Agenda afspraken.csv",header=T, sep=";", dec=",", stringsAsFactors = F, na.strings="", quote="", fileEncoding = "latin1") %>%
   mutate(PatientNr = as.character(patientnr),
          datum = as.Date(datum, format = "%d-%m-%Y")) %>%
-  filter(datum >= "2019-01-01" & datum <= "2019-12-31" &
-           code %in% c("APNW", "PPC", "NP-19", "NPOLIB40")) %>% # 505 unieke patienten 
+  filter(datum >= "2022-01-01" & datum <= "2022-12-31" &
+         code %in% c("APNW", "PPC", "NP-19", "NPOLIB40")) %>% # 505 unieke patienten
   distinct(PatientNr, code)
-table(pat_nrs$code) #alle patienten met APNW of PPC in 2019
-length(unique(pat_nrs$PatientNr)) 
+table(pat_nrs$code) #alle patienten met APNW of PPC in 2022
+length(unique(pat_nrs$PatientNr))
 
 vp_raw1 <- read.csv("Provocatietest MACK 20230413.csv",header=T, sep=";", dec=",", stringsAsFactors = F, na.strings="", quote="", fileEncoding = "latin1")
 
@@ -45,7 +44,7 @@ vp_raw <- vp_raw1 %>% filter(STELLING %in% c("provocatie open", "Provocatie (ope
   rename(PatientNr = PAT_CODE)
 
 #Bereken de datums apart want anders dubbelingen en dan wordt de verkeerde datum meegenomen (zie DA logboek)
-vp_raw_datum <- vp_raw1 %>% filter(STELLING %in% c("Datum", "Datum provocatie", "Datum provocatie dag 1", "Datum provocatie dag 2", "dag 1", "dag 2")) %>%
+vp_raw_datum <- vp_raw1 %>% filter(STELLING %in% c("Datum", "Datum provocatie", "Datum provocatie dag 1", "Datum provocatie dag 2")) %>%
   rename(PatientNr = PAT_CODE) %>%
   mutate(ANTWOORD = as.Date(ANTWOORD, format = "%d-%m-%Y")) %>%
   filter(!(STELLING == "Datum" & ANTWOORD <= "2021-07-01")) %>% #Want verandering van Datum provocatie naar Datum!
@@ -60,22 +59,19 @@ vp_raw <- rbind(vp_raw, vp_raw_datum) %>%
   group_by(PatientNr, STELLING) %>%
   distinct(PatientNr, Datum_Lijst, .keep_all = TRUE) %>%
   tidyr::pivot_wider(names_from = STELLING, values_from = ANTWOORD) %>%
-  ungroup() %>%
-  mutate(`provocatie open` = ifelse(PatientNr == "13686488", NA, `provocatie open`)) # Deze pt heeft alleen dubbelblinde provocatie gehad, niet open en dubbelblind
+  ungroup()
 
-#vp_raw_geendatum <- vp_raw %>% group_by(PatientNr) %>% filter(is.na(`Datum provocatie`) & is.na(`Datum provocatie dag 1`) & is.na(`Datum provocatie dag 2`) & is.na(Datum)) %>%
-#  ungroup() %>%
-#  filter(PatientNr %in% pat_nrs$PatientNr)
-#length(unique(vp_raw_geendatum$PatientNr))
+#vp_raw_geendatum <- vp_raw %>% group_by(PATIENTNR) %>%
+#  filter(is.na(`Datum provocatie`) & is.na(`Datum provocatie dag 1`) & is.na(`Datum provocatie dag 2`)) %>%
+#  ungroup()
+#length(unique(vp_raw_geendatum$PATIENTNR))
 
 vp <- vp_raw %>% mutate(PatientNr = as.character(PatientNr),
                         Geboortedatum = as.Date(geboortedatum, format="%d-%m-%Y"),
                         #Datum = as.Date(Datum,format="%d-%m-%Y"),
                         Datum.provocatie = ifelse(!is.na(`Datum provocatie`), `Datum provocatie`, Datum),
                         Datum.provocatie = as.Date(Datum.provocatie, format="%Y-%m-%d"),
-                        Provocatie.dag.1 = ifelse(!is.na(`Datum provocatie dag 1`), `Datum provocatie dag 1`, `dag 1`),
-                        Provocatie.dag.1 = as.Date(Provocatie.dag.1,format="%Y-%m-%d"),
-                        Provocatie.dag.2 = ifelse(!is.na(`Datum provocatie dag 2`), `Datum provocatie dag 2`, `dag 2`),
+                        Provocatie.dag.1 = as.Date(`Datum provocatie dag 1`, format="%Y-%m-%d"),
                         Provocatie.dag.2 = as.Date(`Datum provocatie dag 2`,format="%Y-%m-%d"),
                         
                         #Provocatie open en blind goed registreren
@@ -108,16 +104,22 @@ vp <- vp_raw %>% mutate(PatientNr = as.character(PatientNr),
          provocatie.open, Open_overig, provocatie.ei, provocatie.melk, provocatie.pinda,
          provocatie.tarwe, provocatie.overig, Conclusie, Indien_conclusie_anders, Toelichting.conclusie)
 
-length(unique(pat_nrs$PatientNr)) 
-length(unique(vp$PatientNr)) # n=240 met 409 voedselprovocatietesten
+length(unique(pat_nrs$PatientNr)) #n= 505 pt met APNW, PPC of NP-19 code.
+length(unique(vp$PatientNr)) # n=209 met 318 voedselprovocatietesten
 
 # patient selectie
 pat_sel <- pat_nrs %>% filter(pat_nrs$PatientNr %in% vp$PatientNr) %>%
   distinct(PatientNr, .keep_all = TRUE)
-length(unique(pat_sel$PatientNr)) #n = 240
+length(unique(pat_sel$PatientNr)) #n = 209
 
-#write.table(pat_sel$PatientNr, file = "./patientselectie_C5_2019_VP.csv", sep = ";", row.names = F) 
-#Niet nodig om te kijken naar pt uit vorige keer data ophalen, beschouw dit al de 1e keer data ophalen.
+#write.table(pat_sel$PatientNr, file = "./patientselectie_C5_2022_VP.csv", sep = ";", row.names = F) 
+
+patsel_2021 <- read.csv("patientselectie_C5_2021_VP.csv",header=T, sep=";", dec=",", stringsAsFactors = F, na.strings="", quote="", fileEncoding = "latin1") %>%
+  mutate(PatientNr = as.character(X.x.))
+Overlap_patienten <- semi_join(pat_sel, patsel_2021, by = "PatientNr")
+pat_sel <- pat_sel %>% filter(!(PatientNr %in% Overlap_patienten$PatientNr))
+
+rm(Overlap_patienten)
 
 ########## OVERIGE DATA INLEZEN ########## 
 
@@ -144,7 +146,6 @@ startdat <- data_agenda %>% filter(CODE=="APNW" | CODE=="PPC" | CODE == "NPOLIB4
 
 ########## BEWERKEN PROVOCATIEDATA ########## 
 
-# definieren provocatie allergeen
 vp <-  vp %>%
   mutate(open=if_else(Provocatie =="open",1,0),
          dubbelblind=if_else(Provocatie =="dubbelblind",1,0),
@@ -185,8 +186,8 @@ vp <-  vp %>%
                                      Provocatie_blind == "walnoot"), 1, 0),
          blind_sesam     = ifelse((grepl("sesam", provocatie.overig, ignore.case=T) |
                                      Provocatie_blind == "sesam"), 1, 0),
-         blind_amandel   = as.numeric(ifelse((grepl("amandel", provocatie.overig, ignore.case=T) | grepl("Amandel", provocatie.overig, ignore.case=T) |
-                                     Provocatie_blind == "amandel"), 1, 0))) %>%
+         blind_amandel   = ifelse((grepl("amandel", provocatie.overig, ignore.case=T) | grepl("Amandel", provocatie.overig, ignore.case=T) |
+                                     Provocatie_blind == "amandel"), 1, 0)) %>%
   mutate_at(vars(open_amandel:blind_amandel),  replace_na, 0) %>% #NA aanpassen naar 0 zodat er met de variabelen gerekend kan worden
   mutate(blind_overig    = ifelse(dubbelblind==1 & blind_ei==0 & blind_melk==0 & blind_pinda==0 & blind_tarwe==0 & blind_hazelnoot==0 & blind_cashew==0 & blind_walnoot==0 & blind_sesam==0 & blind_amandel==0, 1, 0))
 
@@ -200,7 +201,7 @@ table(vp$Conclusie) # andere conclusies getrokken
 #Indien conclusie is anders dan die meenemen
 conc_anders_zonderNA <- vp %>% filter(Conclusie == "anders") %>%
   mutate(Conclusie_incl_anders = ifelse(grepl("positief", Indien_conclusie_anders) | grepl("Positief", Indien_conclusie_anders) |grepl("positef", Indien_conclusie_anders) |
-                              grepl("postief", Indien_conclusie_anders) | grepl("postitef", Indien_conclusie_anders), "positief", NA),
+                                          grepl("postief", Indien_conclusie_anders) | grepl("postitef", Indien_conclusie_anders), "positief", NA),
          Conclusie_incl_anders = ifelse(grepl("negatief", Indien_conclusie_anders) | grepl("neagtief", Indien_conclusie_anders), "negatief", Conclusie_incl_anders),
          Conclusie_incl_anders = ifelse(grepl("dubieus", Indien_conclusie_anders), "dubieus", Conclusie_incl_anders),
          Conclusie_incl_anders = ifelse(grepl("kan niet getrokken worden", Indien_conclusie_anders), "kan niet getrokken worden", Conclusie_incl_anders)) %>%
@@ -222,7 +223,6 @@ table(conc_zeker_blind$conc_zeker)
 conc_zeker_blind_minmelk <- vp %>% filter(Provocatie == "dubbelblind" & blind_melk == 0) %>%
   mutate(conc_zeker = ifelse(Conclusie %in% c("negatief", "positief"), 1, 0)) 
 table(conc_zeker_blind_minmelk$conc_zeker) 
-
 
 
 ########## BRONBESTAND MAKEN ########## 
@@ -351,7 +351,8 @@ table(aantal_vp$Waarde) #totaal aantal provocaties
 #Multiple voedselallergie
 multiple_allergie <-  bron %>%
   select(PatientNr, Datum.provocatie, conclusie) %>%
-  mutate(conclusie_positief = ifelse((conclusie=="positief"), 1, 0)) %>%
+  #full_join(conc_anders_zonderNA) %>%
+  mutate(conclusie_positief = ifelse((conclusie=="positief"), 1, 0)) %>% 
   filter(conclusie_positief==1) %>%
   group_by(PatientNr) %>% 
   mutate(seqn = row_number())%>%
@@ -369,23 +370,34 @@ mv1 <- pat_sel %>% left_join(multiple_allergie,  by = "PatientNr") %>%
   select( Aandoening, Cyclus, Groep, PatientNr, Ind, Waarde, Wegingsfactor)
 table(mv1$Waarde)
 
+
 #Conclusie provocatie
 conc_provocatie <-  bron %>%
-  select(Aandoening, Cyclus, Groep, Wegingsfactor, PatientNr, Datum.provocatie,conclusie)
+  select(Aandoening, Cyclus, Groep, Wegingsfactor, PatientNr, Datum.provocatie,conclusie) #%>%
+#full_join(conc_anders_zonderNA) %>%
+#mutate(conclusie_incl_anders = ifelse((conclusie=="anders" & !is.na(conclusie_anders)), conclusie_anders, conclusie), #neem alleen de conclusie_anders als er bij conclusie ook anders staat
+#       conclusie_incl_anders = ifelse(conclusie == "dubieus positief/negatief", "dubieus", conclusie_incl_anders))  
 
 conclusie_provocatie                <- conc_provocatie %>% mutate( Ind    = "conc",
                                                                    Waarde = ifelse( conclusie == "positief", 1, NA), #Conclusie ipv conclusie_incl_anders
                                                                    Waarde = ifelse( conclusie == "negatief", 2, Waarde),
                                                                    Waarde = ifelse( conclusie == "anders", 3, Waarde), 
-                                                                   Waarde = ifelse( conclusie == "dubieus positief/negatief" | conclusie == "dubieus", 4, Waarde), 
+                                                                   Waarde = ifelse( conclusie == "dubieus positief/negatief", 4, Waarde), 
                                                                    Waarde = ifelse( conclusie == "kan niet getrokken worden", 5, Waarde),
                                                                    Waarde = ifelse( is.na(conclusie), 99, Waarde)) %>%
   select( Aandoening, Cyclus, Groep, PatientNr, Ind, Waarde, Wegingsfactor) 
 table(conclusie_provocatie$Waarde)
 
+#x <- vp %>%
+#  mutate(conc_zeker_open = ifelse(open==1 & (conc_negatief==1 | conc_positief==1),1,0),
+#         conc_zeker_blind = ifelse(dubbelblind==1 & (conc_negatief==1 | conc_positief==1),1,0),
+#         conc_zeker_blind_minmelk = ifelse(dubbelblind==1 & (conc_negatief==1 | conc_positief==1) & blind_melk==0,1,0)) 
+
+
 behandel_mix <- rbind(o_pinda, o_hazelnoot, o_walnoot, o_cashewnoot, o_ei, o_melk, o_amandel, o_pistache, o_soja, o_vis, o_tarwe, o_schaaldieren, o_overig, o_aantal,
                       b_pinda, b_hazelnoot, b_walnoot, b_cashewnoot, b_ei, b_melk, b_amandel, b_sesam, b_tarwe, b_overig, b_aantal,
                       aantal_vp, mv1, conclusie_provocatie)
+
 
 
 
@@ -397,7 +409,7 @@ U1 <- conclusie_provocatie %>% mutate(Ind = "U1",
                                       Waarde = ifelse((Waarde == 1 | Waarde == 2), 1, 0)) #positief of negatief
 table(U1$Waarde)
 
-#Percentage duidelijkheid bepalen voor 2019:
+#Percentage duidelijkheid bepalen voor 2020:
 U1_duidelijkheid <- bron %>% mutate(duidelijkheid = ifelse(conclusie  %in% c("positief", "negatief"), "duidelijkheid", "Geen duidelijkheid")) %>%
   group_by(Provocatie, duidelijkheid) %>%
   summarise(n = n()) %>%
@@ -427,13 +439,12 @@ U3 <- data_epd %>%
 
 bron <-  bron %>% left_join(U3[,c("PatientNr","Waarde")], by="PatientNr")
 sum(bron$U3) #teller U3
-
 #----------------------- SCOREKAART KOSTEN --------------------- #
 # K1 Polikliniekbezoeken en teleconsulten
 kinderarts_poli <- c("APNW", "ACP", "PPC")
 kinderarts_tele <- c("HPOLIB20", "TELSPR", "NPOLIB40", "NP-19")
 dietist_polibezoeken <- c("ADN", "ADC", "PINDA&EI")
-dietist_telebezoeken <- c("TELP&EI", "TEL", "TELDALL", "TELNW") #"DIEMAIL"
+dietist_telebezoeken <- c("TELP&EI", "TEL", "TELDALL", "TELNW") #, "DIEMAIL"
 
 consulten <- data_agenda %>%
   filter(PatientNr %in% pat_sel$PatientNr & Verwijzend.spec == "KIN") %>%
@@ -448,8 +459,9 @@ consulten <- data_agenda %>%
             dietist_tele = sum(dietist_tele,na.rm=T)) %>%
   ungroup()
 
-#x1 <- data_agenda %>% distinct(CODE, CODE_OMS)
-#x <-  bron %>% left_join(consulten, by="PatientNr") #waarom toevoegen?? --> dubbel geteld voor sommige patienten
+x1 <- data_agenda %>% distinct(CODE, CODE_OMS)
+
+x <-  bron %>% left_join(consulten, by="PatientNr") #waarom toevoegen?? --> dubbel geteld voor sommige patienten
 
 sum(consulten$arts_poli)
 summary(consulten$arts_poli)
@@ -489,21 +501,21 @@ bron <-  bron %>%
 bron <-  bron %>%
   group_by(PatientNr) %>% 
   mutate(seqn = row_number())%>%
-  mutate(huisarts_startdat=ifelse(seqn>1,NA,huisarts_startdat)) %>% #Neem alleen de 1e provocatie mee
+  mutate(huisarts_startdat=ifelse(seqn>1,NA,huisarts_startdat)) %>%
   mutate(startdat_VP=ifelse(seqn>1,NA,startdat_VP)) %>%
-  ungroup()
+  ungroup(PatientNr)
 
 #melk 0 tot 1 jaar melk vs. de rest (kinderen tot 1 jaar dus niet incl. 1 jaar!)
 proces_indicatoren <-  bron %>%
-  select(PatientNr, EERSTE_INVOER_DATUM, startdat, Datum, leeftijd, huisarts_startdat, startdat_VP, open_melk, blind_melk) %>%
-  mutate(melk0tot1=if_else(leeftijd < 1 & (open_melk == 1 | blind_melk == 1), 1, 0, missing=0)) %>%  
-  mutate(p11=ifelse(melk0tot1==1,huisarts_startdat,NA)) %>% 
+  select(PatientNr, EERSTE_INVOER_DATUM, startdat, Datum, leeftijd,huisarts_startdat,startdat_VP,open_melk,blind_melk) %>%
+  mutate(melk0tot1=if_else(leeftijd < 1 & (open_melk == 1 | blind_melk ==1), 1, 0, missing=0)) %>%  
+  mutate(p11=ifelse(melk0tot1==1,huisarts_startdat,NA)) %>%
   mutate(p12=ifelse(melk0tot1==0,huisarts_startdat,NA)) %>%
   mutate(p21=ifelse(melk0tot1==1,startdat_VP,NA)) %>%
   mutate(p22=ifelse(melk0tot1==0,startdat_VP,NA)) %>%
   drop_na("huisarts_startdat")
 length(unique(proces_indicatoren$PatientNr)) # check of er 240 patienten overblijven
-length(unique(bron$PatientNr))
+
 #noemers p1
 table(proces_indicatoren$melk0tot1)
 
@@ -517,6 +529,7 @@ p_indicatoren <- function(noemer,  indicator, column){
     select( Aandoening, Cyclus, Groep, PatientNr, Ind, Waarde, Wegingsfactor)
   return(proces)
 }
+
 
 #P1 doorlooptijd in dagen: verwijzing huisarts tot start behandeling
 #sum(proces_indicatoren$huisarts_startdat, na.rm=TRUE)
@@ -542,7 +555,7 @@ P1.2 <- p_indicatoren(p12_noemer, "P1.2", p12_noemer$p12)
 # APNW/PPC datum (startdat) als substituut voor 1e polibezoek
 
 #eerst negatieve doorlooptijden verwijderen
-proces_indicatoren_zondernegdoorlooptijden <- proces_indicatoren %>%   #
+proces_indicatoren_zondernegdoorlooptijden <- proces_indicatoren %>%
   filter(startdat_VP>=0)
 
 #check wie neg doorlooptijd heeft en check in HiX waarom:
@@ -575,5 +588,5 @@ P2.2 <- p_indicatoren(p22_noemer, "P2.2", p22_noemer$p22)
 scorekaart <- rbind(U1, U3, K1.1, K1.2, K1.3, K1.4, P1, P1.1, P1.2, P2, P2.1, P2.2) 
 
 OutputDataSet     <- as.data.frame(rbind(case_mix, behandel_mix, scorekaart))
-save(OutputDataSet, file = "OutputDataSetMACK_C5_2019.rda")
-write.table(OutputDataSet, file = "OutputDataSet_2019.csv", sep = ";", row.names = F)
+save(OutputDataSet, file = "OutputDataSetMACK_C5_2022.rda")
+write.table(OutputDataSet, file = "OutputDataSet_2022.csv", sep = ";", row.names = F)

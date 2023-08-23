@@ -1,5 +1,5 @@
 # VBHC Aandoening: Diabetes
-# Cyclus 5
+# Cyclus 7
 # Script 2
 #
 #
@@ -11,7 +11,7 @@
 # dplyr:      0.8.5
 # lubridate:  1.7.8
 # readxl:     1.3.1
-setwd("/home/afdelingen/kwaliteit.en.veiligheid/Diabetes/Cyclus 5/")
+
 source("./Diabetes_1_voorbereidingsscript.R")
 
 ###---------------------------------------------------------------------------------------------------------------
@@ -100,7 +100,7 @@ Probleemlijst <- Probleemlijst_bron  %>% mutate (
                                         PatientNr          = as.character(PatientNr),
                                         ICDcode            = as.character(ICDcode),
                                         ConstateringsDatum = as.Date(ConstateringsDatum, format = "%Y-%m-%d"))%>%
-                               #mutate(  ICDcode            = gsub("\\*|\\+", "", ICDcode)) %>%
+                               mutate(  ICDcode            = gsub("\\*|\\+", "", ICDcode)) %>%
                                distinct(PatientNr,ICDcode,ConstateringsDatum)
 
 Jaarcontrole <- Jaarcontrole_bron %>% mutate (
@@ -196,7 +196,7 @@ Afspraak <- Afspraak_bron        %>% mutate (
 ### OPSLAAN VAN TABBLADEN ###
 ###------------------------------------------------------------------------------------------------------------
 save(Patient, file="Patient")
-save(PatientSelectie_bron, file="PatientSelectie")
+save(PatientSelectie, file="PatientSelectie")
 save(Subtraject, file="Subtraject")
 save(Verrichting, file="Verrichting")
 save(Probleemlijst, file="Probleemlijst")

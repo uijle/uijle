@@ -120,7 +120,7 @@ medicatie     <- medicatie     %>% mutate( PatientNrMoeder       = as.character(
                                            start_datum           = as.Date(StartDatumTijd, format = "%Y-%m-%d"),
                                            stop_datum            = as.Date(EindDatumTijd, format = "%Y-%m-%d"),
                                            atc_code              = as.character(ATCCODE) ) %>%
-                                   select( PatientNrMoeder, PatientNrKind, start_datum, stop_datum, atc_code)
+                                   select( PatientNrMoeder, PatientNrKind, start_datum, stop_datum, atc_code)'
 
 Bloedproduct  <- Bloedproduct %>% mutate( PatientNrMoeder        = as.character(PatientNr),
                                           TransfusieDatum        = as.Date(TransfusieDatum, format = "%Y-%m-%d"),
@@ -128,7 +128,7 @@ Bloedproduct  <- Bloedproduct %>% mutate( PatientNrMoeder        = as.character(
                                 distinct( PatientNrMoeder, TransfusieDatum, BloedStatusCode)
 
 
-ToedieningRegistratie  <- ToedieningRegistratie %>% mutate( PatientNr           = as.character(PatientNr),
+'ToedieningRegistratie  <- ToedieningRegistratie %>% mutate( PatientNr           = as.character(PatientNr),
                                                             ToedieningDatumTijd = as.POSIXct(ToedieningDatumTijd, format = "%Y-%m-%d %H:%M:%S"),
                                                             ToedieningDatum    = as.Date(ToedieningDatumTijd, format = "%Y-%m-%d", tz="CET"),  #kan ook met as.Date( format( as.POSIXct(ToedieningDatumTijd), "%Y-%m-%d"))
                                                             #ToedieningDatum     = as.Date(ToedieningDatumTijd, format = "%Y-%m-%d"),
@@ -187,7 +187,7 @@ moederKind            <- moederKind %>% mutate( BeginBaring    = ifelse( BeginBa
                                                                           GeboorteDatumMoeder,
                                                                           units = "days")/365.25,
                                                 leeftijd       = as.numeric(leeftijd),
-                                                leeftijd       = ifelse(is.na(leeftijd), 9999, leeftijd))
+                                                leeftijd       = ifelse(is.na(leeftijd), 99999, leeftijd))
 
 
 # ------- Convert zwangerschap naar dagen -------
@@ -297,7 +297,7 @@ BMI                  <- merge( x     = MetingBMI %>% filter(ObservatieOms == "Le
                                by    = "PatientNrMoeder",
                                all.x = TRUE ) %>%
                         mutate(BMI   =  round(Gewicht / (Lengte*Lengte), digits = 2),
-                               BMI   = ifelse(is.na(BMI), 9999, BMI))
+                               BMI   = ifelse(is.na(BMI), 99999, BMI))
 
 
 moederKind           <- merge( x      = moederKind,
@@ -322,7 +322,7 @@ moederKind             <- moederKind %>% mutate( LigKind   = ifelse( LigKind == 
                                                                        LigKind == "onvolkomen stuit"   |
                                                                        LigKind == "half onvolkomen stuit",      2, LigKind),
                                                  LigKind   = ifelse(LigKind == "overig",                     3, LigKind),
-                                                 LigKind   = ifelse( is.na(LigKind) | LigKind == "onbekend", 9999, LigKind) )
+                                                 LigKind   = ifelse( is.na(LigKind) | LigKind == "onbekend", 9, LigKind) )
 
 # --------- Koppel eindebaring aan moederKind gegevens
 eindebaring          <- moederKind %>%   mutate( Groep       = "BM MoederKind",
@@ -336,7 +336,7 @@ eindebaring          <- moederKind %>%   mutate( Groep       = "BM MoederKind",
                                                                       Sectio == "primaire sectio"  , 4, Waarde) ) %>%
                                        arrange( desc(Waarde)) %>%                        # Sorteer zodanig dat hoogste code (het ergste type) bovenaan komt te staan
                                        distinct(PatientNrMoeder, .keep_all = TRUE) %>%
-                                       mutate(  Waarde      = ifelse(!(Waarde %in% c(1:4)), 9999, Waarde))
+                                       mutate(  Waarde      = ifelse(!(Waarde %in% c(1:4)), 9, Waarde))
 
 moederKind            <- merge( x     = moederKind,
                                 y     = eindebaring %>% mutate(eindebaring     = Waarde,
@@ -351,8 +351,8 @@ beginbaring           <- moederKind %>% arrange(GeboorteDatumTijdKind) %>%      
                                         mutate(Groep     = "BM MoederKind",
                                                Ind       = "beginbaring",
                                                PatientNr = PatientNrMoeder,
-                                               Waarde    = BeginBaring, #1=spontaan, 2/3=primen/inleiden, 4=geplande sectio
-                                               Waarde    = ifelse(BeginBaring == 9, 9999, BeginBaring))
+                                               Waarde    = BeginBaring) #1=spontaan, 2/3=primen/inleiden, 4=geplande sectio
+                                               #Waarde    = ifelse(BeginBaring == 9, 99999, BeginBaring))
 
 moederKind            <- merge( x     = moederKind  %>% select(-BeginBaring),
                                 y     = beginbaring %>% mutate(beginbaring     = Waarde,
@@ -374,7 +374,7 @@ moederKind            <- merge( x         = moederKind,
 
 # ------------- Bijstimuleren ------------
 moederKind              <- moederKind %>% mutate(Bijstimulatie = ifelse(Bijstimulatie == "ja", 1, 0),
-                                                 Bijstimulatie = ifelse(is.na(Bijstimulatie),  9999, Bijstimulatie))
+                                                 Bijstimulatie = ifelse(is.na(Bijstimulatie),  9, Bijstimulatie))
 
 
 # ----- Duur gebroken vliezen > 1080 min -----
@@ -391,7 +391,7 @@ duurgebrvliezen       <- duurgebrvliezen %>% mutate( Ind        = "dgv",
                                                      Waarde     = ifelse(duurVlies >= 0 &
                                                                          duurVlies <= 18*60, 0, NA),
                                                      Waarde     = ifelse(duurVlies >  18*60, 1, Waarde),
-                                                     Waarde     = ifelse(is.na(Waarde),     9999, Waarde) )
+                                                     Waarde     = ifelse(is.na(Waarde),     9, Waarde) )
 
 moederKind            <- merge( x     = moederKind,
                                 y     = duurgebrvliezen %>% mutate(langgebrvliezen     = Waarde,
@@ -412,19 +412,20 @@ persduur             <- moederKind %>% filter( !(eindebaring == 4 |
                                                                    difftime(GeboorteDatumTijdKind, PersenDatumTijd + years(1), units = "min"), Persduur),
                                                Persduur   = ifelse(Persduur < 0,
                                                                    difftime(GeboorteDatumTijdKind + days(1), PersenDatumTijd, units = "min"), Persduur),
-                                               Persduur   = ifelse(Persduur >= 0 & Persduur <= 180, Persduur, 9999))
+                                               Persduur   = ifelse(Persduur >= 0 & Persduur <= 180, Persduur, 99999))
 
 
 moederKind            <- merge( x     = moederKind,
                                 y     = persduur %>%
                                   select(PatientNrKind, Persduur),
                                 by    = "PatientNrKind",
-                                all.x = TRUE)
+                                all.x = TRUE) %>%
+                                mutate(Persduur = ifelse(is.na(Persduur), -1, Persduur))
 
 
 # - Moeders overgedragen tijdens bevalling -
 # ------ Overdracht van eerste lijn ------
-moederKind       <- moederKind %>% mutate(Overdracht    = ifelse(is.na(Overdracht), 9999, Overdracht))
+moederKind       <- moederKind %>% mutate(Overdracht    = ifelse(is.na(Overdracht), 9, Overdracht))
 
 # ------ NTSV bevallingen ------
 moederKind            <- moederKind %>% mutate(NTSV = ifelse( Meerling == 1 &        # Eenlingen
@@ -435,21 +436,48 @@ moederKind            <- moederKind %>% mutate(NTSV = ifelse( Meerling == 1 &   
 
 # ---- U2.2 Bloedverlies moeders ---------
 moederKind          <- moederKind %>% mutate(Bloedverlies1000 = ifelse(Bloedverlies > 1000, 1, 0),
-                                             Bloedverlies1000 = ifelse(is.na(Bloedverlies), 9999, Bloedverlies1000))
+                                             Bloedverlies1000 = ifelse(is.na(Bloedverlies), 9, Bloedverlies1000))
 
+
+# ------ U2.3 Bloedtransfusie ------------
+bloedtransfusie <- merge( x     = moederKind      %>% select(PatientNrMoeder, OpnameDatum_moeder,  OntslagDatum_moeder),
+                          y     = verrichting_mom %>% filter((AGB_Code      == "0307" | AGB_Code  == "GYN" | AGB_Code == "0389" | AGB_Code == "ANE") &
+                                                               DiagnoseCode %in% c("Z41", "B41") &
+                                                               ZACode       %in% c("190400", "190402", "190430", "190431", "190432", "190433", "190434", "190440", "190441",
+                                                                                   "190445", "190446", "190447", "190448", "190449", "190450", "190460", "190470", "190489") &
+                                                               Aantal >= 1 ) %>%
+                            select(PatientNrMoeder, Verrichtingdatum),
+                          by    = "PatientNrMoeder",
+                          all.x = TRUE) %>%
+  filter(OpnameDatum_moeder  <= Verrichtingdatum &
+           OntslagDatum_moeder >= Verrichtingdatum) %>%
+  distinct(PatientNrMoeder, Verrichtingdatum, .keep_all = TRUE)
+
+
+bloedtransfusie  <- merge(x     = bloedtransfusie,
+                          y     = Bloedproduct %>% filter(BloedStatusCode == "Administered"),
+                          by    = "PatientNrMoeder",
+                          all.x = TRUE) %>%
+  filter(OpnameDatum_moeder  <= TransfusieDatum &
+           OntslagDatum_moeder >= TransfusieDatum)
+
+moederKind              <- moederKind %>%
+                            mutate(bloedtransfusie= ifelse(PatientNrMoeder %in% bloedtransfusie$PatientNrMoeder, 1, 0) )
 
 # inleiding
 moederKind          <- moederKind %>% mutate(Inleiding = ifelse(beginbaring == 2 | beginbaring == 3, 1, 0),
-                                             Inleiding = ifelse(beginbaring==9999, 9999, Inleiding))
+                                             Inleiding = ifelse(beginbaring==9, 9, Inleiding))
 
 # Totaalbestand (pas hier cyclus nummer aan)
-moederKind_11          <- moederKind %>% mutate() %>%
+moederKind_10          <- moederKind %>% mutate() %>%
                                       filter(NTSV==1) %>%
+                                      mutate(Bloedverlies = ifelse(is.na(Bloedverlies), 99999, Bloedverlies),
+                                             Geboortegewicht = ifelse(is.na(Geboortegewicht), 99999, Geboortegewicht)) %>%
                                       select(PatientNrMoeder, Zwd,  Bloedverlies, Bloedverlies1000, leeftijd, BMI, Overdracht,
-                                             Inleiding, eindebaring, langgebrvliezen, Bijstimulatie, Epiduraal, Geboortegewicht, Persduur)
+                                             Inleiding, eindebaring, langgebrvliezen, Bijstimulatie, Epiduraal, Geboortegewicht, Persduur, bloedtransfusie)
 
 library(openxlsx)
-save(moederKind_11, file = paste0("moederKind_", as.character(Cyclus_nr), ".rda"))
+save(moederKind_10, file = paste0("moederKind_", as.character(Cyclus_nr), ".rda"))
 
 #Draai script hierboven voor cyclus 10 en 11, dan door naar onderstaande stukje
 
@@ -468,7 +496,7 @@ Totaalbestand          <- Totaalbestand %>%
                        mutate(n =1:n()) %>%
                        mutate(sleutelnummer=str_pad(n, 4, pad = "0")) %>%
                        mutate(sleutelnummer = gsub("^(.{0})(.*)$",
-                                                   "\\MZH\\2", #pas aan voor eigen ziekenhuis
+                                                   "\\CZE\\2", #pas aan voor eigen ziekenhuis
                                                    sleutelnummer)) %>%
                        select(-n)
 Versleuteling_ptnr <- Totaalbestand %>% select(sleutelnummer, PatientNrMoeder)

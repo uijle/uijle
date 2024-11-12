@@ -125,8 +125,8 @@ data_huis       <- data_wide %>%
     Aantal_opnames_per_patient                            = as.numeric(K4.3.1), 
 
     Percentage_patienten_met_biological_spiegel_meting    = as.numeric(P3),
-    'Polikliniekbezoek'                                   = as.numeric(K2.1.1) + as.numeric(K2.1.2) + as.numeric(K2.1.3),
-    'Teleconsult'                                         = as.numeric(K2.2.1) + as.numeric(K2.2.2) + as.numeric(K2.2.3),
+    'Polikliniekbezoek'                                   = as.numeric(K2.1.1) + as.numeric(K2.1.2),
+    'Teleconsult'                                         = as.numeric(K2.2.1) + as.numeric(K2.2.2),
     Inclusiedatum_huis = as.Date(as.numeric(inclusie_datum),format = "%Y-%m-%d",origin = "1970-01-01")) %>%
   left_join(data_hips_2021,by="Identificatienummer")
 

@@ -119,6 +119,14 @@ Subtraject_stap2a <- Subtraject_stap2 %>%
                                      select(  -Dagen) %>%
                                      arrange( PatientNr, OpeningsDatum)
 
+
+# check <- left_join(Subtraject_stap2 %>%
+#                      distinct(PatientNr, ZorgType, OpeningsDatum), 
+#                    Subtraject_stap2a %>%
+#                      distinct(PatientNr, ZorgType, OpeningsDatum), 
+#                    by = c("PatientNr", "OpeningsDatum")) %>%
+#   filter(       ZorgType.x != ZorgType.y)
+
 # Stap 3: Identificeer en verwijder reguliere DBCs die niet worden gevolgd door een gevulde vervolg DBC ###
 laatste_dbc <- Subtraject_stap2a %>%  filter(  ZorgType == "11" | ZorgType == "R") %>%                                # alle nieuwe DBCs behouden
                                       arrange( PatientNr, desc(OpeningsDatum)) %>%                                     # laatste nieuwe DBC bovenaan
@@ -225,10 +233,10 @@ Subtraject_stap7 <- Subtraject_stap6 %>% arrange(PatientNr, OpeningsDatum, Sluit
                                          ungroup() %>%
                                          select(-sv_id)
 
-  # Stap 7a: Samenvoegen trajecten als er minder dat 365 dagen tussen zit
+  # Stap 7a: Samenvoegen trajecten als er minder dat 540 dagen tussen zit
   Subtraject_stap7a <- Subtraject_stap7 %>% arrange(PatientNr, OpeningsDatum, SluitingsDatum) %>%
                                             group_by(PatientNr) %>%
-                                            mutate(samenvoegen = if_else(row_number()!= 1 & lag(SluitingsDatum)+365 >= OpeningsDatum, 0, 1)) %>%
+                                            mutate(samenvoegen = if_else(row_number()!= 1 & lag(SluitingsDatum)+540 >= OpeningsDatum, 0, 1)) %>%
                                             ungroup() %>%
                                             mutate(sv_id = cumsum(samenvoegen)) %>%
                                             group_by(sv_id) %>%
@@ -246,28 +254,28 @@ Subtraject_stap8 <- Subtraject_stap7a %>% filter( OpeningsDatum  <= stopwindow &
                                                  SluitingsDatum >= startwindow)
 
 ### Voeg meerdere trajecten samen ###
-Subtraject_stap8 <- Subtraject_stap8 %>% arrange(PatientNr,OpeningsDatum,SluitingsDatum) %>%
+Subtraject_stap8b <- Subtraject_stap8 %>% arrange(PatientNr,OpeningsDatum,SluitingsDatum) %>%
                                          group_by(PatientNr) %>%
                                          summarise(
                                             DM_start  = min(OpeningsDatum),
                                             DM_stop   = max(SluitingsDatum),
                                             Diagnose   = last(Diagnose)) %>%
-                                          mutate(DM_start = as.Date(DM_start,origin="1970-01-01")) %>%
+                                          mutate(DM_start = as.Date(DM_start,origin="1970-01-01") +180) %>%
                                           mutate(DM_stop = as.Date(DM_stop,origin="1970-01-01")) %>%
                                           ungroup()
 
 ### Zet diabetes_start en diabetes_stop op start- en stopwindow bij overschrijding ###
-Subtraject_stap8 <- data.frame(Subtraject_stap8) %>%  mutate(selectie_start = ifelse(DM_start < startwindow, startwindow, DM_start),
+Subtraject_stap8c <- data.frame(Subtraject_stap8b) %>%  mutate(selectie_start = ifelse(DM_start < startwindow, startwindow, DM_start),
                                                              selectie_stop  = ifelse(DM_stop  > stopwindow,  stopwindow,  DM_stop),
                                                              selectie_start = as.Date(selectie_start, origin = "1970-01-01"),
                                                              selectie_stop  = as.Date(selectie_stop,  origin = "1970-01-01"))
 
 # Stap 9: Bereken wegingsfactor
-Subtraject_stap9  <- Subtraject_stap8 %>%
+Subtraject_stap9  <- Subtraject_stap8c %>%
                     mutate(Wegingsfactor =  as.numeric( difftime(selectie_stop, selectie_start, units = "days") + 1) /
                                             as.numeric( difftime(stopwindow,    startwindow,    units = "days") + 1 ) ) %>%
-                    mutate(Groep = ifelse(selectie_start > startwindow, 2, 1)) %>%
-                    filter(!PatientNr %in% Overname_kind$PatientNr)
+                    mutate(Groep = ifelse(selectie_start > startwindow, 2, 1)) #%>%
+                    #filter(!PatientNr %in% Overname_kind$PatientNr)
 
 # Van de volgende groep moet het type diabetes bekend zijn
 PatientSelectie_final <- bind_rows(Subtraject_stap9 %>% select(PatientNr, Groep), Overname_kind %>%

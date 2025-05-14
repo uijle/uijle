@@ -11,64 +11,11 @@
 # lubridate:  1.7.8
 # readxl:     1.3.1
 
-library(dplyr)        # For using piping operator
-library(lubridate)    # Voor easy date manupilation
-library(readxl)       # Nodig zolang Excel ingelezen wordt
-library(tidyr)
-library(openxlsx)
-library(stringr)
-setwd("//olvg.nl/dfs/Groups02/5125/Concernstaf/1. Kwaliteit & veiligheid/4 Transparantie/VBHC/VBHC_data/Diabetes/Cyclus 5/Data")
-#save.image('Image 20240815.RData')
-#load('Image 20240815.RData')
-#save.image('Image 20241103.RData')
-#load('Image 20241103.RData')
-
-#PatientSelectie <- PatientSelectie %>% 
-#  select(-Groep)
-
 # Selecteer DM1 patienten uit cyclus 5, en groep 1
-input_hips <- Subtraject_stap9  %>%
-                      filter((Groep != 4 )) 
-                               # Cyclus == "C5" &
-                                  #(TypeDM == "Type 1" | TypeDM == "LADA"))
-#RL voor HIPS: input dataframe maken
-input_hips <- input_hips %>% 
- #left_join(PatientSelectie, by = "PatientNr") %>% 
- mutate(Aandoening = "diabetes",
-        # Groep = "volwassenen",
-         ZiekenhuisCode = "olvg", 
-         DM_stop=as.Date(DM_stop)) %>% #aanvulling Whitney
-  rename(Identificatienummer = PatientNr,
-         InclusieDatum = DM_start,
-         EindDatum = DM_stop) %>% 
-  select(Aandoening, Groep, Identificatienummer, InclusieDatum, EindDatum, ZiekenhuisCode)
-
-#uitsplitsen van de patienten populatie naar patienten per jaar (uit f_Patient_per_jaar HIPS), aanvulling whitney
-# Bepaal voor welk kalenderjaar de patient in de populatie zit 
-kalenderjaar_in_inclusie = list()
-for(i in 1:nrow(input_hips)) {
-  kalenderjaar_in_inclusie[[i]] = (seq(year(input_hips$InclusieDatum)[i], year(input_hips$EindDatum)[i], by= 1))
-}
-
-# Herhaal voor iedere jaar in de selectie de gehele selectie periode
-df_long <- input_hips[rep(1:nrow(input_hips), times = lengths(kalenderjaar_in_inclusie)),]
-
-# Splits periode op naar kalender jaar
-df_Populatie_by_year <- df_long %>% mutate(   Jaar          = unlist(kalenderjaar_in_inclusie),
-                                              Groep         = as.character(Groep),
-                                              InclusieDatum = if_else(as.Date(paste0(Jaar,"-01-01")) > InclusieDatum,  as.Date(paste0(Jaar,"-01-01")), InclusieDatum  ),
-                                              EindDatum     = if_else(as.Date(paste0(Jaar,"-12-31")) < as.Date(EindDatum),      as.Date(paste0(Jaar,"-12-31")), EindDatum ),
-                                              InclusieDatum = as.Date( format(InclusieDatum, "%Y-%m-%d")),
-                                              EindDatum     = as.Date( format(EindDatum,  "%Y-%m-%d"))) %>% 
-  distinct( Identificatienummer, Groep, InclusieDatum, EindDatum, Aandoening, ZiekenhuisCode) 
-
-# selecteer alleen 2021
-window_begindatum <- as.Date( "2021-01-01", format = "%Y-%m-%d")
-window_einddatum  <- as.Date( "2021-12-31", format = "%Y-%m-%d")
-input_hips<-df_Populatie_by_year%>%filter(InclusieDatum >= window_begindatum &
-                                            InclusieDatum <= window_einddatum)
-
-write.xlsx(input_hips, "diabetes_WideFormat_huis_patientselectie.xlsx", col_names = TRUE)
+PatientSelectie <- PatientSelectie_bron %>%
+                      filter((Groep == 1 ) &
+                                Cyclus == "C5" &
+                                  (TypeDM == "Type 1" | TypeDM == "LADA"))
 
 # ---- Selecteer alleen de benodigde gegevens -----
 Patient       <- Patient       %>% filter( PatientNr %in% PatientSelectie$PatientNr)
@@ -98,39 +45,26 @@ Metingen      <- Metingen      %>% filter( PatientNr %in% PatientSelectie$Patien
 # --------------- Leeftijd ---------------------------------------------------------------------------
 # Leeftijd berekenen a.d.h.v. geboortedatum uit tabblad patient en peildatum gelijk aan startwindow
 leeftijd    <- Patient %>%
-  mutate(leeftijd = ceiling((as.numeric(difftime(startwindow, GeboorteDatum, units = "days"))/365) - 0.5))%>% #WF: geboortedatum afronden naar hele jaren
-  select(PatientNr, leeftijd) %>% # RL: voor HIPS
-  rename(lft = leeftijd,
-         Identificatienummer = PatientNr)  # RL: voor HIPS
+                mutate (leeftijd=(as.numeric(difftime(startwindow, GeboorteDatum, units = "days")))/365) %>%
+                select(PatientNr, leeftijd)
 
-# RL: voor HIPS
-input_hips = input_hips %>% 
-  left_join(leeftijd, by = "Identificatienummer")
-
-# lft         <- leeftijd %>%  mutate( Groep  = case_mix_name,
-                                     #Ind    = "lft") %>% 
-                                     # Waarde = ifelse( leeftijd < 30, 1, NA),
-                                     # Waarde = ifelse( leeftijd >= 30 & leeftijd < 50, 2, Waarde),
-                                     # Waarde = ifelse( leeftijd >= 50 & leeftijd < 70, 3, Waarde),
-                                     # Waarde = ifelse( leeftijd >= 70, 4, Waarde)) %>%
-               # select(PatientNr, Groep, Ind, Waarde)
-               # table(lft$Waarde)
-
+lft         <- leeftijd %>%  mutate( Groep  = case_mix_name,
+                                     Ind    = "lft",
+                                     Waarde = ifelse( leeftijd < 30, 1, NA),
+                                     Waarde = ifelse( leeftijd >= 30 & leeftijd < 50, 2, Waarde),
+                                     Waarde = ifelse( leeftijd >= 50 & leeftijd < 70, 3, Waarde),
+                                     Waarde = ifelse( leeftijd >= 70, 4, Waarde)) %>%
+               select(PatientNr, Groep, Ind, Waarde)
+               table(lft$Waarde)
 
 # --------------- Geslacht ---------------------------------------------------------------------------
-gsl         <- Patient %>%  mutate( #Groep  = case_mix_name,
-                                    #Ind    = "gsl")
-                                    # Waarde = ifelse(Geslacht == "M",1,NA),
-                                    Geslacht = ifelse(Geslacht == "V","F",Geslacht)) %>% #RL: aanpassing V naar F voor volgens HIPS definitie
-                                    # Waarde = ifelse(is.na(Geslacht) | Geslacht == "NULL", 99, Waarde)) %>%
-                            select(PatientNr, Geslacht) %>% 
-                            rename(gsl = Geslacht, 
-                                   Identificatienummer = PatientNr) # RL: voor HIPS
-               # table(gsl$Waarde)
-
-# RL: voor HIPS
-input_hips = input_hips %>% 
-  left_join(gsl, by = "Identificatienummer")
+gsl         <- Patient %>%  mutate( Groep  = case_mix_name,
+                                    Ind    = "gsl",
+                                    Waarde = ifelse(Geslacht == "M",1,NA),
+                                    Waarde = ifelse(Geslacht == "V",2,Waarde),
+                                    Waarde = ifelse(is.na(Geslacht) | Geslacht == "NULL", 99, Waarde)) %>%
+               select(PatientNr, Groep, Ind, Waarde)
+               table(gsl$Waarde)
 
 # --------------- Koppel lengte [m] meting dichtste bij startwindow aan patientselectie --------------
 Lengte        <- Metingen   %>% filter(  PatientNr    %in% Patient$PatientNr &
@@ -166,174 +100,90 @@ Patient      <- merge( x     = Patient,
                        all.x = TRUE)
 
 # ---------------------------------- Bepaal BMI van patient ----------------------------------
-#bmi <- Patient %>% 
- # mutate(bmi = Gewicht/(Lengte*Lengte)) %>% 
- # select(PatientNr, bmi) %>% # RL: voor HIPS
- # rename(Identificatienummer = PatientNr)# RL: voor HIPS
+Patient <- Patient %>% mutate(BMI = Gewicht/(Lengte*Lengte))
 
-#bmi     <- Patient %>% mutate( Groep  = case_mix_name,
-                               #Ind    = "bmi") %>% 
-                               # Waarde = ifelse(BMI <  18.5, 1, NA),
-                               # Waarde = ifelse(BMI >= 18.5 & BMI <  25.0, 2, Waarde),
-                               # Waarde = ifelse(BMI >= 25.0 & BMI <  30.0, 3, Waarde),
-                               # Waarde = ifelse(BMI >= 30.0, 4, Waarde),
-                               # Waarde = ifelse(is.na(BMI),  99, Waarde)) %>%
-                    #select(PatientNr, BMI) Groep, Ind, Waarde)
-                    #table(bmi$Waarde)
-
-# RL: voor HIPS
-#input_hips = input_hips %>% 
-  #left_join(bmi, by = "Identificatienummer")
-                   
-# ---------------------------------- Etniciteit ----------------------------------     
-#etn        <- Metingen %>%
-                    #filter(ObservatieOms == "Etniciteit") %>%
-                   # group_by(PatientNr) %>% 
-                    #rename(etn = Uitslag,# RL: voor HIPS 
-                          # Identificatienummer = PatientNr) %>% # RL: voor HIPS 
-                    #select(Identificatienummer, etn)# RL: voor HIPS 
-# RL: voor HIPS                    
-#etn        <- etn %>% left_join(Patient, etn, by="PatientNr") %>%  
-                    #mutate( Groep  = case_mix_name,
-                            #Ind    = "etn") %>% 
-                            # Waarde = ifelse(Uitslag == "Kaukasisch", 1, NA),
-                            # Waarde = ifelse(Uitslag == "Noord-Afrikaans", 2, Waarde),
-                            # Waarde = ifelse(Uitslag == "Overig Afrikaans", 3, Waarde),
-                            # Waarde = ifelse(Uitslag == "Turks- en Caicoseilanden", 4, Waarde),
-                            # Waarde = ifelse(Uitslag == "Hindoestaans", 5, Waarde),
-                            # Waarde = ifelse(Uitslag == "Overig Aziatisch", 6, Waarde),
-                            # Waarde = ifelse(Uitslag == "Latijns Amerikaans", 7, Waarde),
-                            # Waarde = ifelse(Uitslag == "Meervoudige afkomst", 8, Waarde),
-                            # Waarde = ifelse(Uitslag == "Onbekend", 99, Waarde),
-                            # Waarde = ifelse(is.na(Waarde), 99, Waarde)) %>%
-                              #etn = Uitslag) %>% 
-                   #select(PatientNr, etn) Groep, Ind, Waarde)
-                   #table(etn$Waarde) 
-
-# RL: voor HIPS
-#input_hips = input_hips %>% 
-  #left_join(etn, by = "Identificatienummer")
-                    
-# ---------------------------------- Sociaal economische status ----------------------------------
-#ses        <- Metingen %>%
-#                    filter(ObservatieOms == "Hoogst genoten opleiding") %>%
-#                    group_by(PatientNr)
-                    
-#ses        <- left_join(Patient, ses, by="PatientNr") %>%  
-#                    mutate( Groep  = case_mix_name,
-#                            Ind    = "ses",
-#                            Waarde = ifelse(Uitslag == "Basisschool", 1, NA),
-#                            Waarde = ifelse(Uitslag == "Lager beroepsonderwijs", 2, Waarde),
-#                            Waarde = ifelse(Uitslag == "vmbo-t", 3, Waarde),                    
-#                            Waarde = ifelse(Uitslag == "Middelbaar beroepsonderwijs", 4, Waarde),
-#                            Waarde = ifelse(Uitslag == "Hoger algemeen onderwijs", 5, Waarde),
-#                            Waarde = ifelse(Uitslag == "Hoger beroepsonderwijs", 6, Waarde),
-#                            Waarde = ifelse(Uitslag == "Wetenschappelijk onderwijs", 7, Waarde),
-#                            Waarde = ifelse(Uitslag == "Anders", 8, Waarde),
-#                            Waarde = ifelse(Uitslag == "Onbekend", 99, Waarde),
-#                            Waarde = ifelse(is.na(Waarde), 99, Waarde)) %>%
-#                    select(PatientNr, Groep, Ind, Waarde)
-#                    table(ses$Waarde)
-
-#RL voor HIPS: ses (=opl) niet meegenomen in cyclus 5, dossiercheck? 
-#input_hips = input_hips %>% 
- # mutate(opl = NA)
+bmi     <- Patient %>% mutate( Groep  = case_mix_name,
+                               Ind    = "bmi",
+                               Waarde = ifelse(BMI <  18.5, 1, NA),
+                               Waarde = ifelse(BMI >= 18.5 & BMI <  25.0, 2, Waarde),
+                               Waarde = ifelse(BMI >= 25.0 & BMI <  30.0, 3, Waarde),
+                               Waarde = ifelse(BMI >= 30.0, 4, Waarde),
+                               Waarde = ifelse(is.na(BMI),  99, Waarde)) %>%
+                    select(PatientNr, Groep, Ind, Waarde)
+                    table(bmi$Waarde)
 
 # ---------------------------------- Diagnose sinds ------------------------------------------
 # Datum diagnose o.b.v. ConstateringsDatum (Probleemlijst) of diagdat (DPARD)
 # O.b.v. PROBLEEMLIJST
-
-diagduur    <- Probleemlijst %>% # RL: voor HIPS: diagnose in diagduur veranderd
+diagnose    <- Probleemlijst %>%
+                  #filter(str_detect(ICDcode, "E10"))
                   filter( grepl("E10", ICDcode)) %>%
-                  filter( ICDcode != "E10.4") %>%
-                  mutate (diagduur=ceiling(as.numeric(difftime(startwindow, ConstateringsDatum, units = "days")/365)-0.5)) %>% #WF: diagduur afronden naar hele jaren
-                  select(PatientNr, diagduur) %>% 
-                  rename(Identificatienummer = PatientNr)# RL: voor HIPS
+                  mutate (diagnose=(as.numeric(difftime(startwindow, ConstateringsDatum, units = "days")))/365) %>%
+                  select(PatientNr, diagnose)
 
-#RL voor HIPS
-input_hips = input_hips %>% 
-  left_join(diagduur, by = "Identificatienummer")
-
-# RL: voor HIPS
-#diagnose         <- diagnose %>%  mutate( Groep  = case_mix_name,
-                                      #Ind    = "diagnose") %>% 
-                                      # Waarde = ifelse( diagnose <= 0, 1, NA),
-                                      # Waarde = ifelse( diagnose > 0 & diagnose <= 5, 2, Waarde),
-                                      # Waarde = ifelse( diagnose > 5 & diagnose <= 10, 3, Waarde),
-                                      # Waarde = ifelse( diagnose > 10 & diagnose <=15, 4, Waarde),
-                                      # Waarde = ifelse( diagnose > 15, 5, Waarde),
-                                      # Waarde = ifelse( is.na(diagnose ), 99, Waarde)) %>%
-                    #select(PatientNr, Groep, Ind, Waarde)
-                    #table(diagnose$Waarde)
+diagnose         <- diagnose %>%  mutate( Groep  = case_mix_name,
+                                      Ind    = "diagnose",
+                                      Waarde = ifelse( diagnose <= 0, 1, NA),
+                                      Waarde = ifelse( diagnose > 0 & diagnose <= 5, 2, Waarde),
+                                      Waarde = ifelse( diagnose > 5 & diagnose <= 10, 3, Waarde),
+                                      Waarde = ifelse( diagnose > 10 & diagnose <=15, 4, Waarde),
+                                      Waarde = ifelse( diagnose > 15, 5, Waarde),
+                                      Waarde = ifelse( is.na(diagnose ), 99, Waarde)) %>%
+                    select(PatientNr, Groep, Ind, Waarde)
+                    table(diagnose$Waarde)
 
 # O.b.v. JAARCONTROLE
-#diagnose     <- Jaarcontrole %>%
-#                  filter(VraagOms=="DiagnoseJaar") %>%
-#                  mutate(diagnose = as.numeric(Uitslag)) %>%
-#                  filter(!is.na(diagnose)) %>%
-#                  distinct()%>%
-#                  mutate(diagnose = as.numeric( format(startwindow, format = "%Y") )- diagnose)
+diagnose     <- Jaarcontrole %>%
+                  filter(VraagOms=="DiagnoseJaar") %>%
+                  mutate(diagnose = as.numeric(Uitslag)) %>%
+                  filter(!is.na(diagnose)) %>%
+                  distinct()%>%
+                  mutate(diagnose = as.numeric( format(startwindow, format = "%Y") )- diagnose)
 
-#diagnose         <- left_join(Patient, diagnose, by="PatientNr") %>%
-#                                mutate( Groep  = case_mix_name,
-#                                        Ind    = "diagnose",
-#                                        Waarde = ifelse( diagnose <= 0, 1, NA),
-#                                        Waarde = ifelse( diagnose > 0 & diagnose <= 5, 2, Waarde),
-#                                        Waarde = ifelse( diagnose > 5 & diagnose <= 10, 3, Waarde),
-#                                        Waarde = ifelse( diagnose > 10 & diagnose <=15, 4, Waarde),
-#                                        Waarde = ifelse( diagnose > 15, 5, Waarde),
-#                                        Waarde = ifelse( is.na(diagnose ), 99, Waarde)) %>%
-#                   select(PatientNr, Groep, Ind, Waarde)
-#                   table(diagnose$Waarde)
+diagnose         <- left_join(Patient, diagnose, by="PatientNr") %>%
+                                mutate( Groep  = case_mix_name,
+                                        Ind    = "diagnose",
+                                        Waarde = ifelse( diagnose <= 0, 1, NA),
+                                        Waarde = ifelse( diagnose > 0 & diagnose <= 5, 2, Waarde),
+                                        Waarde = ifelse( diagnose > 5 & diagnose <= 10, 3, Waarde),
+                                        Waarde = ifelse( diagnose > 10 & diagnose <=15, 4, Waarde),
+                                        Waarde = ifelse( diagnose > 15, 5, Waarde),
+                                        Waarde = ifelse( is.na(diagnose ), 99, Waarde)) %>%
+                   select(PatientNr, Groep, Ind, Waarde)
+                   table(diagnose$Waarde)
 
 # ---------------------------------- Roken -------------------------------------------------
 # O.b.v. JAARCONTROLE
-#rok     <- Jaarcontrole %>%
-#              filter(VraagOms=="Roken") %>%               #LET OP: IN STA GECODEERD ALS 1 = 'ja, 0 = 'nee'
-#              mutate(rok = as.numeric(Uitslag)) %>%
-#              filter(!is.na(rok)) %>%
-#              distinct()
+Roken     <- Jaarcontrole %>%
+              filter(VraagOms=="Roken") %>%               #LET OP: IN STA GECODEERD ALS 1 = 'ja, 0 = 'nee'
+              mutate(Roken = as.numeric(Uitslag)) %>%
+              filter(!is.na(roken)) %>%
+              distinct()
 
-#rok       <- left_join(Patient, rok, by="PatientNr") %>%
-#                              mutate( Groep  = case_mix_name,
-#                                      Ind    = "rok",
-#                                      Waarde = ifelse(rok == 0, 0, NA),
-#                                      Waarde = ifelse(rok == 1, 1, Waarde),
-#                                      Waarde = ifelse(is.na(Waarde), 99, Waarde)) %>%
-#                select(PatientNr, Groep, Ind, Waarde)
-#                table(rok$Waarde)
-
+roken       <- left_join(Patient, Roken, by="PatientNr") %>%
+                              mutate( Groep  = case_mix_name,
+                                      Ind    = "rok",
+                                      Waarde = ifelse(roken == 0, 0, NA),
+                                      Waarde = ifelse(roken == 1, 1, Waarde),
+                                      Waarde = ifelse(is.na(Waarde), 99, Waarde)) %>%
+                select(PatientNr, Groep, Ind, Waarde)
+                table(roken$Waarde)
 
 # O.b.v. EPD FLOWSHEETMETING
-rok       <- Metingen %>%
+roken       <- Metingen %>%
                filter(ObservatieOms=="Roken") %>%
                group_by(PatientNr) %>%
-               filter(ObservatieDatum==max(ObservatieDatum)) %>% 
-  #mutate(Uitslag = case_when(Uitslag == "Rookt" ~ "Rookt dagelijks tabak", # RL voor HIPS: uitkomsten aanpassen naar valueset_TabakGebruikStatusCodelijst.csv 
-                             #Uitslag == "Rookt soms" ~ "Rookt soms tabak",
-                             #Uitslag == "Rookt passief" ~ "Rookt passief tabak",
-                             #Uitslag == "Niet roker, vroeger onbekend" ~ "Niet-roker, maar rookgedrag in verleden onbekend",
-                             #Uitslag == "Ex-roker" ~ "Rookte vroeger",
-                             #Uitslag == "Nooit gerookt" ~ "Heeft nooit gerookt",
-                             #Uitslag == "Onbekend" ~ "Tobacco smoking consumption unknown")) %>% 
-               rename(rok = Uitslag, 
-                      Identificatienummer = PatientNr) %>% # RL voor HIPS
-               select(Identificatienummer, rok)  # RL voor HIPS
-#table(rok$Waarde)
+               filter(ObservatieDatum==max(ObservatieDatum))
 
-#rok       <- left_join(Patient, rok, by="PatientNr") %>%  
-                              #mutate( Groep  = case_mix_name,
-                                      #Ind    = "rok") %>% 
-                                      # Waarde = ifelse(Uitslag == "Rookt", 1, NA),
-                                      # Waarde = ifelse(Uitslag == "Ex-roker", 0, Waarde),
-                                      # Waarde = ifelse(Uitslag == "Nooit gerookt" , 0, Waarde),
-                                      # Waarde = ifelse(Uitslag == "Onbekend", 99, Waarde),
-                                      # Waarde = ifelse(is.na(Waarde), 99, Waarde)) %>%
-             #select(PatientNr, Groep, Ind, Waarde)
-              #table(rok$Waarde)
-
-input_hips = input_hips %>% 
-  left_join(rok, by = "Identificatienummer")
+roken       <- roken   %>%    mutate( Groep  = case_mix_name,
+                                      Ind    = "rok",
+                                      Waarde = ifelse(Uitslag == "Rookt", 1, NA),
+                                      Waarde = ifelse(Uitslag == "Ex-roker", 2, Waarde),
+                                      Waarde = ifelse(Uitslag == "Nooit gerookt" , 2, Waarde),
+                                      Waarde = ifelse(Uitslag == "Onbekend", 99, Waarde)) %>%
+              select(PatientNr, Groep, Ind, Waarde) %>%
+              distinct(PatientNr, Groep, Ind, Waarde) %>%
+              mutate(check=ifelse(duplicated(PatientNr),1,0))
 
 # ----------------------- Alcohol consumptie --------------------------------------------------
 # O.b.v. DPARD
@@ -346,17 +196,17 @@ input_hips = input_hips %>%
 # HbA1c wordt berekend onder Uitkomstindicatoren.
 
 # ----------------------- Retinopathie ---------------------------------------------------
-#retinopathie  <-  subset(     Subtraject,(DiagnoseCode %in% DBC_retino)
-                                          #& SpecialismeCode=='0301' & (OpeningsDatum<=stopwindow & SluitingsDatum>=startwindow)) %>%
-                              #group_by(   PatientNr) %>%
-                              #summarise(  retinopathie = first(DiagnoseCode))
+retinopathie  <-  subset(     Subtraject,(DiagnoseCode %in% DBC_retino)
+                                          & SpecialismeCode=='0301' & (OpeningsDatum<=stopwindow & SluitingsDatum>=startwindow)) %>%
+                              group_by(   PatientNr) %>%
+                              summarise(  retinopathie = first(DiagnoseCode))
 
-#retino           <-  left_join(Patient, retinopathie, by="PatientNr") %>%
-                                #mutate(     Groep  = case_mix_name,
-                                            #Ind    = "retino",
-                                           # Waarde = ifelse(!is.na(retinopathie),1,0)) %>%
-                     #select(PatientNr, Groep, Ind, Waarde)
-                     #table(retino$Waarde)
+retino           <-  left_join(Patient, retinopathie, by="PatientNr") %>%
+                                mutate(     Groep  = case_mix_name,
+                                            Ind    = "retino",
+                                            Waarde = ifelse(!is.na(retinopathie),1,0)) %>%
+                     select(PatientNr, Groep, Ind, Waarde)
+                     table(retino$Waarde)
 
 # ----------------------- Leefstijl advies --------------------------------------------------
 # O.b.v. DPARD
@@ -443,21 +293,22 @@ input_hips = input_hips %>%
 # O.b.v. JAARCONTROLE
 # Check patienten met alleen tabletten. Dit zal altijd in combinatie zijn met pomp of pen.
 # Categoriseer ze vervolgens in juiste categorie, anders bij 'onbekend'.
-ther     <- Jaarcontrole %>%
+Insulinetherapie     <- Jaarcontrole %>%
                             filter(VraagOms=="Insulinetherapie") %>%
-                            mutate(ther = as.character(Uitslag)) %>%
-                            filter(!is.na(ther)) %>%
+                            mutate(Insulinetherapie = as.character(Uitslag)) %>%
+                            filter(!is.na(Insulinetherapie)) %>%
                             distinct()
-#  RL: voor HIPS | vraag: tabletten worden bij HIPS niet meegenomen? 
-ther     <- left_join(Patient, ther, by="PatientNr") %>%
+
+Insulinetherapie     <- left_join(Patient, Insulinetherapie, by="PatientNr") %>%
                             mutate( Groep  = case_mix_name,
-                                    Ind    = "ther") %>% 
-                                    # Waarde = ifelse(ther == 'pomp',1,NA),
-                                    # Waarde = ifelse(ther == 'pen',2,Waarde),
-                                    # Waarde = ifelse(ther == 'tabletten',3,Waarde),
-                                    # Waarde = ifelse(is.na(Waarde),99,Waarde))%>%
-                            distinct(PatientNr, Groep, Ind, ther) #Waarde)
-                            #table(ther$Waarde)
+                                    Ind    = "insulther",
+                                    Waarde = ifelse(Insulinetherapie == 'pomp',1,NA),
+                                    Waarde = ifelse(Insulinetherapie == 'pen',2,Waarde),
+                                    Waarde = ifelse(Insulinetherapie == 'tabletten',3,Waarde),
+                                    Waarde = ifelse(is.na(Waarde),99,Waarde))%>%
+                            distinct(PatientNr, Groep, Ind, Waarde)
+                            table(Insulinetherapie$Waarde)
+
 # Controle: Pomp o.b.v. DBC's
 # Check verschil tussen jaarcontrole en DBC (bijv: patient in begin inclusie periode pomp, vervolgens over op pen)
 # Deze indicator wordt ook gebruikt bij combi pomp/RT-CGM
@@ -468,26 +319,25 @@ pomp        <- Subtraject %>%
 
 pomp         <- left_join(Patient, pomp, by="PatientNr") %>%
                             mutate(     Groep  = case_mix_name,
-                                        Ind    = "pomp") %>% 
-                                        Waarde = ifelse(!is.na(pomp),1,0) %>%
+                                        Ind    = "pomp",
+                                        Waarde = ifelse(!is.na(pomp),1,0)) %>%
                             select(PatientNr, Groep, Ind, Waarde)
                             table(pomp$Waarde)
 
 # ------------------- Real-time continue glucosemeter --------------------------------
 # Real-time continue glucosemeter wordt geregistreerd met ZACode 190351
-# rtcgm       <- Verrichting %>%
-#                             filter(     ZACode=="190351" & (Verrichtingdatum>=startwindow & Verrichtingdatum<=stopwindow)) %>%
-#                             group_by(   PatientNr) %>%
-#                             summarise(  rtcgm = n())
-# 
-# rtcgm         <- left_join(Patient, rtcgm, by="PatientNr") %>%
-#                             mutate(     Groep  = case_mix_name,
-#                                         Ind    = "rtcgm") %>% 
-#                                         # Waarde = ifelse(!is.na(rtcgm),1,0)) %>%
-#                 select(PatientNr, Groep, Ind, Waarde)
-#                 table(rtcgm$Waarde)
+rtcgm       <- Verrichting %>%
+                            filter(     ZACode=="190351" & (Verrichtingdatum>=startwindow & Verrichtingdatum<=stopwindow)) %>%
+                            group_by(   PatientNr) %>%
+                            summarise(  rtcgm = n())
 
-# RL: voor HIPS > rtcgm wordt voor HIPS als meisch hulpmiddel opgehaald niet (meer) als verrichting, maakt dat uit? Samenvoegen met fgm (en combi?) voor validatiescript
+rtcgm         <- left_join(Patient, rtcgm, by="PatientNr") %>%
+                            mutate(     Groep  = case_mix_name,
+                                        Ind    = "rtcgm",
+                                        Waarde = ifelse(!is.na(rtcgm),1,0)) %>%
+                select(PatientNr, Groep, Ind, Waarde)
+                table(rtcgm$Waarde)
+
 # O.b.v. JAARCONTROLE
 rtcgm     <- Jaarcontrole %>%
                             filter(     VraagOms=="rtcgm") %>%
@@ -505,20 +355,20 @@ rtcgm       <- left_join(Patient, rtcgm, by="PatientNr") %>%
 # ----------------------- Flash glucose meter --------------------------------------------------
 # Flash glucose meter wordt vergoed door basisverzekering, in eigen ziekenhuis achterhalen hoe dit wordt geregistreerd
 # O.b.v. JAARCONTROLE
-fgm     <- Jaarcontrole %>%
+Flash     <- Jaarcontrole %>%
                             filter(     VraagOms=="Flash") %>%
-                            mutate(     fgm = as.numeric(Uitslag)) %>%  #LET OP: IN STA GECODEERD ALS 1 = 'ja, 0 = 'nee'
-                            filter(!is.na(fgm)) %>%
+                            mutate(     Flash = as.numeric(Uitslag)) %>%  #LET OP: IN STA GECODEERD ALS 1 = 'ja, 0 = 'nee'
+                            filter(!is.na(Flash)) %>%
                             distinct()
 
-fgm     <- left_join(Patient, fgm, by="PatientNr") %>%
+Flash     <- left_join(Patient, Flash, by="PatientNr") %>%
                             mutate(     Groep  = case_mix_name,
-                                        Ind    = "fgm",
-                                        Waarde = ifelse(fgm == 0, 0, NA),
-                                        Waarde = ifelse(fgm == 1, 1, Waarde),
-                                        Waarde = ifelse(is.na(fgm), 99, Waarde)) %>%
+                                        Ind    = "Flash",
+                                        Waarde = ifelse(Flash == 0, 0, NA),
+                                        Waarde = ifelse(Flash == 1, 1, Waarde),
+                                        Waarde = ifelse(is.na(Flash), 99, Waarde)) %>%
                             select(PatientNr, Groep, Ind, Waarde)
-                            table(fgm$Waarde)
+                            table(Flash$Waarde)
 
 # ----------------------- Combi pomp en RT-CGM ---------------------------------------
 combi         <- left_join(pomp,rtcgm, by="PatientNr") %>%
@@ -566,51 +416,43 @@ hba1c_cat   <- hba1c %>%
                                     cat_laatste=cut(laatste, breaks=c(-Inf, 53, 64, 74, Inf), labels=c("<=53",">53,<65",">=65,<75",">=75")))
 
 ##### VOOR CASEMIX #####
-HbA1c    <- hba1c %>%
+HbA1c_cm    <- hba1c %>%
                         filter(     AfnameDatumTijd == max(AfnameDatumTijd))
 
-HbA1c    <- left_join(Patient, HbA1c, by="PatientNr") %>%
+HbA1c_cm    <- left_join(Patient, HbA1c_cm, by="PatientNr") %>%
                         mutate(     Uitslag = as.numeric(Uitslag),
                                     cat_laatste=cut(Uitslag, breaks=c(-Inf, 53, 64, 74, Inf), labels=c("<=53",">53,<65",">=65,<75",">=75"))) %>%
-                        #mutate    ( Groep  = case_mix_name, #RL voor HIPS
-                                   # Ind    = "HbA1c",
-                                   # Waarde = ifelse(cat_laatste=="<=53", 1, 0),
-                                   # Waarde = ifelse(cat_laatste==">53,<65", 2, Waarde),
-                                   # Waarde = ifelse(cat_laatste==">=65,<75", 3, Waarde),
-                                   # Waarde = ifelse(cat_laatste==">=75", 4, Waarde),
-                                   # Waarde = ifelse(is.na(cat_laatste), 99, Waarde)) %>%
-                        rename(hba1c = Uitslag, #RL voor HIPS
-                               Identificatienummer = PatientNr) %>%  #RL voor HIPS
-                        select(Identificatienummer, hba1c) #RL voor HIPS
-                        #table(HbA1c$Waarde)
-  
-input_hips = input_hips %>% 
-  left_join(HbA1c, by = "Identificatienummer") #RL voor HIPS
+                        mutate    ( Groep  = case_mix_name,
+                                    Ind    = "HbA1c",
+                                    Waarde = ifelse(cat_laatste=="<=53", 1, 0),
+                                    Waarde = ifelse(cat_laatste==">53,<65", 2, Waarde),
+                                    Waarde = ifelse(cat_laatste==">=65,<75", 3, Waarde),
+                                    Waarde = ifelse(cat_laatste==">=75", 4, Waarde),
+                                    Waarde = ifelse(is.na(cat_laatste), 99, Waarde)) %>%
+  select(PatientNr, Groep, Ind, Waarde)
+  table(HbA1c_cm$Waarde)
 
 ##### VOOR TABBLAD HbA1c tabel #####
 table(hba1c_cat$cat_eerste, hba1c_cat$cat_laatste) #horizontale categorieen = laatste meting, verticale categorieen = eerste meting
 
 # Indicator U1.1
-#U11         <- hba1c_cat %>%
-#                        filter(     cat_laatste!="<=53") %>%
-#                        mutate(     Groep  = scorekaart_name,
-#                                    Ind    = "U1.1",
-#                                    Waarde = ifelse(verschil>=10,1,0)) %>%
-#  select(PatientNr, Groep, Ind, Waarde)
-#  table(U11$Waarde)
+U11         <- hba1c_cat %>%
+                        filter(     cat_laatste!="<=53") %>%
+                        mutate(     Groep  = scorekaart_name,
+                                    Ind    = "U1.1",
+                                    Waarde = ifelse(verschil>=10,1,0)) %>%
+  select(PatientNr, Groep, Ind, Waarde)
+  table(U11$Waarde)
 
 # Indicator U1.2
 U12         <- hba1c_cat %>%
-  mutate(     Groep  = scorekaart_name,
-              Ind    = "U1.2",
-              Waarde = ifelse(cat_eerste==">=75" & cat_laatste==">=75",1,0)) %>%
-  rename(U1.2=Waarde, Identificatienummer = PatientNr) %>%  
-  select(Identificatienummer, U1.2) 
+                        mutate(     Groep  = scorekaart_name,
+                                    Ind    = "U1.2",
+                                    Waarde = ifelse(cat_eerste==">=75" & cat_laatste==">=75",1,0)) %>%
+                        filter(     !is.na(Waarde)) %>%
+  select(PatientNr, Groep, Ind, Waarde)
+  table(U12$Waarde)
 
-# df HIPS  
-input_hips = input_hips %>% 
-  left_join(U12, by = "Identificatienummer")
-  
 ###-------------------------------------------------------------------------------------------------------
 ###----------------------------------- U2 Intermediate outcomes --------------------------------------------
 ###-------------------------------------------------------------------------------------------------------
@@ -719,8 +561,7 @@ Events_U3 <- full_join(SEH_U3, Events_U3, by=c("PatientNr", "Verrichtingdatum" =
 #Events_U3 <- full_join(SEH_U3, Events_U3, by=c("PatientNr", ("Verrichtingdatum" + days(1) = "OpnameDatumTijd")))
 
 ###-------------------------------------------------------------------------------------------------------
-#write.xlsx(Events_U3, "./Events_U3.xlsx")
-write.xlsx(Events_U3, "//olvg.nl/dfs/Groups02/5125/Concernstaf/1. Kwaliteit & veiligheid/4 Transparantie/VBHC/VBHC_data/Diabetes/Cyclus 5/Data/Events_U3.xlsx")
+write.xlsx(Events_U3, "./Events_U3.xlsx")
 ### SEH en opname lijst verrijken met extra ziekenhuis specifieke gegevens rondom een opname (OLVG: opname-indicatie of reden SEH bezoek).
 ### D.m.v. die informatie en dossieronderzoek achterhalen of de patient was opgenomen vanwege DKA of hypoglykemie.
 ### Subindicatoren toegevoegd voor aantal opnames vanwege DKA of hypoglykemie.
@@ -735,9 +576,7 @@ amputatie <- Verrichting %>%
                         group_by(   PatientNr, Verrichtingdatum, ZACode) %>%
                         mutate(     Aantal = sum(Aantal)) %>%
                         filter(     Aantal >= 1) %>%
-                        distinct(   PatientNr, Verrichtingdatum, ZACode, ZAOmschrijving, Aantal)
-
-write.xlsx(amputatie, "//olvg.nl/dfs/Groups02/5125/Concernstaf/1. Kwaliteit & veiligheid/4 Transparantie/VBHC/VBHC_data/Diabetes/Cyclus 5/Checks/U3.3_amputatie_C5.xlsx")
+                        distinct(   PatientNr, Verrichtingdatum, ZACode, Aantal)
 
 U33 <- left_join(Patient, amputatie, by="PatientNr") %>%
                         mutate( Groep    = scorekaart_name,
@@ -746,6 +585,22 @@ U33 <- left_join(Patient, amputatie, by="PatientNr") %>%
                         distinct(PatientNr, Groep, Ind, Waarde)
         table(U33$Waarde)
 
+# Indicator U3.4 - Acuut myocardinfarct
+myocardinfarct     <- c("I21.0", "I21.1", "I21.2", "I21.3", "I21.4", "I21.9", "I22.0", "I22.1", "I22.8", "I22.9")
+
+incmyocardinfarct  <- Probleemlijst %>%
+                        filter(   ICDcode %in% myocardinfarct) %>%
+                        filter(   ConstateringsDatum <= stopwindow & ConstateringsDatum >= startwindow) %>%
+                        group_by( PatientNr) %>%
+                        distinct( PatientNr)
+        
+U34  <- left_join(Patient, incmyocardinfarct, by = "PatientNr") %>%
+                        mutate(   Groep  = scorekaart_name,
+                                  Ind    = "U3.4",
+                                  Waarde = ifelse( PatientNr %in% incmyocardinfarct$PatientNr,1,0) ) %>%
+                        distinct(   PatientNr, Groep, Ind, Waarde)
+        table(U34$Waarde)
+        
 ###-------------------------------------------------------------------------------------------------------
 ###----------------------------------- U4 Chronische complicatie -------------------------------------------
 ###-------------------------------------------------------------------------------------------------------
@@ -772,18 +627,34 @@ U41a <- left_join(Patient, injecties, by="PatientNr") %>%
 
 # Indicator U4.2 - Diabetische neuropathie
 # O.B.V. JAARCONTROLE
-#Neuropathie  <-         Jaarcontrole %>%
-#                        filter(     VraagOms == "Neuropathie") %>%
-#                        mutate(     Uitslag = as.numeric(Uitslag)) %>%
-#                        filter(     !is.na(Uitslag)) %>%
-#                        distinct()
+Neuropathie  <-         Jaarcontrole %>%
+                        filter(     VraagOms == "Neuropathie") %>%
+                        mutate(     Uitslag = as.numeric(Uitslag)) %>%
+                        filter(     !is.na(Uitslag)) %>%
+                        distinct()
 
-#U42         <- left_join(Patient, Neuropathie, by="PatientNr") %>%
-#                        mutate(     Groep  = scorekaart_name,
-#                                    Ind    = "U4.2",
-#                                    Waarde = ifelse(Uitslag==1,1,0)) %>%
-#                        select(PatientNr, Groep, Ind, Waarde)
-#  table(U42$Waarde)
+U42         <- left_join(Patient, Neuropathie, by="PatientNr") %>%
+                        mutate(     Groep  = scorekaart_name,
+                                    Ind    = "U4.2",
+                                    Waarde = ifelse(Uitslag==1,1,0)) %>%
+                        select(PatientNr, Groep, Ind, Waarde)
+  table(U42$Waarde)
+
+# O.B.V. PROBLEEMLIJST
+neuropathie        <- c("E10.4", "E11.4", "E12.4", "E13.4", "E14.4")
+  
+prevneuropathie  <- Probleemlijst %>%
+                        filter(   ICDcode %in% neuropathie) %>%
+                        filter(   ConstateringsDatum <= stopwindow) %>%
+                        group_by( PatientNr) %>%
+                        distinct( PatientNr)
+
+U42  <- left_join(Patient, prevneuropathie, by = "PatientNr") %>%
+                        mutate(   Groep  = scorekaart_name,
+                                  Ind    = "U4.2",
+                                  Waarde = ifelse( PatientNr %in% prevneuropathie$PatientNr,1,0) ) %>%
+                        distinct(   PatientNr, Groep, Ind, Waarde)
+  table(U42$Waarde)
 
 # Indicator U4.7 - Ischemische hartziekte
 # O.B.V. DBC
@@ -801,6 +672,23 @@ U47         <- left_join(Patient, cardiovasc, by="PatientNr") %>%
   select(PatientNr, Groep, Ind, Waarde)
   table(U47$Waarde)
 
+# O.B.V. PROBLEEMLIJST
+ischemie           <- c("I23.0", "I23.1", "I23.2", "I23.3", "I23.4", "I23.5", "I23.6", "I23.8", "I25.0", "I25.1", 
+                        "I25.3", "I25.4", "I25.5", "I25.6", "I25.8", "I25.9")
+  
+previschemie  <- Probleemlijst %>%
+                        filter(   ICDcode %in% ischemie) %>%
+                        filter(   ConstateringsDatum <= stopwindow) %>%
+                        group_by( PatientNr) %>%
+                        distinct( PatientNr)
+  
+U47  <- left_join(Patient, previschemie, by = "PatientNr") %>%
+                        mutate(   Groep  = scorekaart_name,
+                                  Ind    = "U4.7",
+                                  Waarde = ifelse( PatientNr %in% previschemie$PatientNr,1,0) ) %>%
+                        distinct(   PatientNr, Groep, Ind, Waarde)
+  table(U47$Waarde)  
+  
 # Indicator U4.9 - Nierfunctie (LAATSTE METING, alleen berekend m.b.v. CKD-EPI)
 nierfun         <- Lab %>%
                       filter(     BepalingOms=="egfr" & (AfnameDatumTijd>=startwindow & AfnameDatumTijd<=stopwindow)) %>%
@@ -871,16 +759,6 @@ U51  <- Patient %>%
   table(U51$Waarde)
 
 ###-------------------------------------------------------------------------------------------------------
-###----------------------------------- U6 Kwaliteit van leven -----------------------------------------------------
-###-------------------------------------------------------------------------------------------------------
-  
-# Indicator U6.1 - % uitgestuurde PROMS vragenlijsten in het afgelopen jaar
-  
-  
-# Indicator U6.2 - % ingevulde PROMS vragenlijsten in het afgelopen jaar  
-  
-  
-###-------------------------------------------------------------------------------------------------------
 ###----------------------------------- K1 Hulpmiddelen -----------------------------------------------------
 ###-------------------------------------------------------------------------------------------------------
 
@@ -902,7 +780,6 @@ Verrichting_K2  <- VerrichtingDiagn %>%
                       filter(     Aantal != 0) %>%
                       select(     PatientNr,OpnameNr,ZACode,Verrichtingdatum,AGB_CodeUitvoerder,Aantal,DiagnoseCode)
 
-# Indicator zelf invullen in scorekaart
 K21b    <- inner_join(Opname_K2, Verrichting_K2, by=c("PatientNr", "OpnameNr")) %>%
                       group_by(   OpnameNr) %>%
                       mutate(  Waarde = sum(Aantal)) %>%
@@ -926,8 +803,7 @@ K22a         <- VerrichtingDiagn %>%
                       sum(K22a$Waarde)
 
 ###-------------------------------------------------------------------------------------------------------
-#write.xlsx(K22, "./nazoeken_IC.xlsx")
-write.xlsx(K22a, "//olvg.nl/dfs/Groups02/5125/Concernstaf/1. Kwaliteit & veiligheid/4 Transparantie/VBHC/VBHC_data/Diabetes/Cyclus 5/Data/Nazoeken_IC.xlsx")
+write.xlsx(K22, "./nazoeken_IC.xlsx")
 # D.M.V. Dossieronderzoek nazoeken of de reden van opname op IC diabetes gerelateerd is
 ###-------------------------------------------------------------------------------------------------------
 
@@ -935,7 +811,6 @@ write.xlsx(K22a, "//olvg.nl/dfs/Groups02/5125/Concernstaf/1. Kwaliteit & veiligh
 SEH         <- VerrichtingDiagn %>%
                       filter(     ZACode=="190015" & (Verrichtingdatum>=startwindow & Verrichtingdatum<=stopwindow)) %>%
                       filter(     DiagnoseCode %in% DBC_diabetes) %>%
-                     #filter(     AGB_CodeUitvoerder == '0313') %>%
                       group_by(   PatientNr) %>%
                       mutate(  SEH = sum(Aantal)) %>%
                       distinct(PatientNr, SEH)
@@ -946,8 +821,6 @@ K23a         <- left_join(Patient, SEH, by="PatientNr") %>%
                                   Waarde = ifelse(!is.na(SEH),1,0)) %>%
   select(PatientNr, Groep, Ind, Waarde)
   table(K23a$Waarde)
-
-write.xlsx(SEH, "//olvg.nl/dfs/Groups02/5125/Concernstaf/1. Kwaliteit & veiligheid/4 Transparantie/VBHC/VBHC_data/Diabetes/Cyclus 5/Data/SEH_0313.xlsx")
 
 ###-------------------------------------------------------------------------------------------------------
 ###----------------------------------- K3 Polibezoeken -----------------------------------------------------
@@ -1018,52 +891,52 @@ K312         <- left_join(Patient, tele_int, by="PatientNr") %>%
 # Indicator K3.2 - Diabetes Verpleegkundige
 # LET OP: o.b.v. afspraken! Filter afdeling niet nodig indien er filter diabetes verpleegkundige is.
 DM_vpk      <- Afspraak %>%
-                  filter(     AfspraakStatus=="Afgerond" & (Afdeling=="JT POLI INTERNE GENEESKUNDE" | Afdeling=="OP POLI INTERNE GENEESKUNDE" | Afdeling=="JT POLI DIABOSS") &
-                              (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) & 
-                              (AfspraakCodeOms=="Spreekuurbezoek" | AfspraakCodeOms=="Telefoon" | AfspraakCodeOms=="Video consult") &
-                              (SpecialistTypeOms=="Verpleegkundige" | SpecialistTypeOms=="Verpleegkundige mob")) %>%
-                  group_by(   PatientNr) %>%
-                  summarise(  aantal = n())
-    
+                        filter(     AfspraakStatus=="Afgerond" & (Afdeling=="DIABETOLOGIE" | Afdeling=="INT") &
+                                      (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) &
+                                      (AfspraakCodeOms=="Spreekuurbezoek" | AfspraakCodeOms=="Tel consult" | AfspraakCodeOms=="Videoconsult") &
+                                      (SpecialistTypeOms=="Verpleegkundige")) %>%
+                        group_by(   PatientNr) %>%
+                        summarise(  aantal = n())
+
 K32         <- left_join(Patient, DM_vpk, by="PatientNr") %>%
-                  mutate(     Groep  = scorekaart_name,
-                              Ind    = "K3.2",
-                              Waarde = ifelse(!is.na(aantal),aantal,0)) %>%
-                  select(PatientNr, Groep, Ind, Waarde)
-                  summary(K32$Waarde)
-    
+                        mutate(     Groep  = scorekaart_name,
+                                    Ind    = "K3.2",
+                                    Waarde = ifelse(!is.na(aantal),aantal,0)) %>%
+  select(PatientNr, Groep, Ind, Waarde)
+  summary(K32$Waarde)
+
 # Subindicator K3.2.1 - Polibezoeken bij diabetes verpleegkundige
 DM_vpk_poli      <- Afspraak %>%
-                      filter(     AfspraakStatus=="Afgerond" & (Afdeling=="JT POLI INTERNE GENEESKUNDE" | Afdeling=="OP POLI INTERNE GENEESKUNDE" | Afdeling=="JT POLI DIABOSS") &
-                                  (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) & 
-                                  (AfspraakCodeOms=="Spreekuurbezoek") &
-                                  (SpecialistTypeOms=="Verpleegkundige" | SpecialistTypeOms=="Verpleegkundige mob")) %>%
-                      group_by(   PatientNr) %>%
-                      summarise(  aantal = n())
-    
+                        filter(     AfspraakStatus=="Afgerond" & (Afdeling=="DIABETOLOGIE" | Afdeling=="INT") &
+                                      (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) &
+                                      (AfspraakCodeOms=="Spreekuurbezoek") &
+                                      (SpecialistTypeOms=="Verpleegkundige")) %>%
+                        group_by(   PatientNr) %>%
+                        summarise(  aantal = n())
+
 K321               <- left_join(Patient, DM_vpk_poli, by="PatientNr") %>%
-                      mutate(     Groep  = scorekaart_name,
-                                  Ind    = "K3.2.1",
-                                  Waarde = ifelse(!is.na(aantal),aantal,0)) %>%
-                      select(PatientNr, Groep, Ind, Waarde)
-                      summary(K321$Waarde)
-    
+                        mutate(     Groep  = scorekaart_name,
+                                    Ind    = "K3.2.1",
+                                    Waarde = ifelse(!is.na(aantal),aantal,0)) %>%
+                        select(PatientNr, Groep, Ind, Waarde)
+  summary(K321$Waarde)
+
 # Subindicator K3.2.2 - Tel consulten bij diabetes verpleegkundige
 DM_vpk_tel        <- Afspraak %>%
-                      filter(     AfspraakStatus=="Afgerond" & (Afdeling=="JT POLI INTERNE GENEESKUNDE" | Afdeling=="OP POLI INTERNE GENEESKUNDE" | Afdeling=="JT POLI DIABOSS") &
-                                  (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) &
-                                  (AfspraakCodeOms=="Telefoon" | AfspraakCodeOms=="Video consult") &
-                                  (SpecialistTypeOms=="Verpleegkundige" | SpecialistTypeOms=="Verpleegkundige mob")) %>%
-                      group_by(   PatientNr) %>%
-                      summarise(  aantal = n())
-    
+                        filter(     AfspraakStatus=="Afgerond" & (Afdeling=="DIABETOLOGIE" | Afdeling=="INT") &
+                                      (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) &
+                                      (AfspraakCodeOms=="Tel consult" | AfspraakCodeOms=="Videoconsult") &
+                                      (SpecialistTypeOms=="Verpleegkundige")) %>%
+                        group_by(   PatientNr) %>%
+                        summarise(  aantal = n())
+
 K322               <- left_join(Patient, DM_vpk_tel, by="PatientNr") %>%
-                      mutate(     Groep  = scorekaart_name,
-                                  Ind    = "K3.2.2",
-                                  Waarde = ifelse(!is.na(aantal),aantal,0)) %>%
-                      select(PatientNr, Groep, Ind, Waarde)
-                      summary(K322$Waarde)
-    
+                        mutate(     Groep  = scorekaart_name,
+                                    Ind    = "K3.2.2",
+                                    Waarde = ifelse(!is.na(aantal),aantal,0)) %>%
+                        select(PatientNr, Groep, Ind, Waarde)
+  summary(K322$Waarde)
+
 # Indicator K3.3 - Dietist
 dietist     <- Verrichting %>%
                   filter((    Verrichtingdatum>=startwindow & Verrichtingdatum<=stopwindow) &
@@ -1081,50 +954,41 @@ K33         <- left_join(Patient, dietist, by="PatientNr") %>%
   table(K33$Waarde)
 
                         ## evt. o.b.v. afspraken
-                        #dietist <- left_join(Patient, Afspraak, by="PatientNr") %>%
-                        #  filter(AfspraakStatus=="Afgerond" &
-                        #           (Afdeling=="DIETETIEK") &
-                        #           (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) &
-                        #           (SpecialistTypeOms=="Dietist")) %>%
-                        #  group_by(PatientNr) %>%
-                        #  summarise(aantal = n())
-                        #summary(dietist$aantal)
-                        #sum(dietist$aantal)
+                        dietist <- left_join(Patient, Afspraak, by="PatientNr") %>%
+                          filter(AfspraakStatus=="Afgerond" &
+                                   (Afdeling=="DIETETIEK") &
+                                   (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) &
+                                   (SpecialistTypeOms=="Dietist")) %>%
+                          group_by(PatientNr) %>%
+                          summarise(aantal = n())
+                        summary(dietist$aantal)
+                        sum(dietist$aantal)
 
 # Indicator K3.4 - Psycholoog/psychiater
-#psych       <- Verrichting %>%
-#                        filter((    Verrichtingdatum>=startwindow & Verrichtingdatum<=stopwindow) &
-#                                      (ZACode %in% ZA_psych)) %>%
-#                        filter(Aantal != 0) %>%
-#                        group_by(   PatientNr) %>%
-#                        mutate(Waarde = sum(Aantal)) %>%
-#                        distinct(PatientNr, Waarde)
+psych       <- Verrichting %>%
+                        filter((    Verrichtingdatum>=startwindow & Verrichtingdatum<=stopwindow) &
+                                      (ZACode %in% ZA_psych)) %>%
+                        filter(Aantal != 0) %>%
+                        group_by(   PatientNr) %>%
+                        mutate(Waarde = sum(Aantal)) %>%
+                        distinct(PatientNr, Waarde)
 
-#K34         <- left_join(Patient, psych, by="PatientNr") %>%
-#                        mutate(     Groep  = scorekaart_name,
-#                                    Ind    = "K3.4",
-#                                    Waarde = ifelse(!is.na(Waarde),1,0)) %>%
-#  select(PatientNr, Groep, Ind, Waarde)
-#  table(K34$Waarde)
+K34         <- left_join(Patient, psych, by="PatientNr") %>%
+                        mutate(     Groep  = scorekaart_name,
+                                    Ind    = "K3.4",
+                                    Waarde = ifelse(!is.na(Waarde),1,0)) %>%
+  select(PatientNr, Groep, Ind, Waarde)
+  table(K34$Waarde)
 
                         ## evt. o.b.v. afspraken
                         psych <- Afspraak %>%
-                          filter(AfspraakStatus=="Afgerond" & 
-                                   (Afdeling=="JT POLI PSYCHIATRIE & MEDISCHE PSYCHOLOGIE" | Afdeling=="OP POLI PSYCHIATRIE & MEDISCHE PSYCHOLOGIE") &
-                                   (Verwijzer=="0313") &
-                                   (ConsultType=="Intake psychiatrie" | ConsultType=="Intake psychologie" | ConsultType=="Intake seksuologie") &
+                          filter(AfspraakStatus=="Afgerond" &
+                                   (Afdeling=="PSYCHOLOGIE") &
                                    (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow)) %>%
                           group_by(PatientNr) %>%
                           summarise(aantal = n())
                         summary(psych$aantal)
                         sum(psych$aantal)
-                        
-                        K34         <- left_join(Patient, psych, by="PatientNr") %>%
-                                                  mutate(     Groep  = scorekaart_name, 
-                                                              Ind    = "K3.4",
-                                                              Waarde = ifelse(!is.na(aantal),1,0)) %>%
-                                                  select(PatientNr, Groep, Ind, Waarde) 
-                                                  table(K34$Waarde)
 
 # Indicator K3.5a - Oogarts/optometrist
 polibezoeken_oogarts <- VerrichtingDiagn %>%
@@ -1159,7 +1023,7 @@ optometrie <- VerrichtingDiagn %>%
 
 oogarts_optometrist <- bind_rows(polibezoeken_oogarts, optometrie)%>%
                         group_by(   PatientNr) %>%
-                        summarise( Waarde = sum(Aantal))
+                        mutate( Waarde = sum(Aantal))
 
 K35a         <- left_join(Patient, oogarts_optometrist, by="PatientNr") %>%
                         mutate(     Groep  = scorekaart_name,
@@ -1186,19 +1050,19 @@ K351 <- left_join(Patient, fundus, by="PatientNr") %>%
 
 # Indicator K3.6 - Podotherapeut
 # LET OP: o.b.v. afspraken! Filter afdeling niet nodig indien er filter podotherapeut is.
-#podotherapeut <- Afspraak %>%
-#                        filter(     AfspraakStatus=="Afgerond" &
-#                                      SpecialistTypeOms=="Podotherapeut" &
-#                                      (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow)) %>%
-#                        group_by(   PatientNr) %>%
-#                        summarise(  aantal = n())
+podotherapeut <- Afspraak %>%
+                        filter(     AfspraakStatus=="Afgerond" &
+                                      SpecialistTypeOms=="Podotherapeut" &
+                                      (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow)) %>%
+                        group_by(   PatientNr) %>%
+                        summarise(  aantal = n())
 
-#K36         <- left_join(Patient, podotherapeut, by="PatientNr") %>%
-#                        mutate(     Groep  = scorekaart_name,
-#                                    Ind    = "K3.6",
-#                                    Waarde = ifelse(!is.na(aantal),1,0)) %>%
-#  select(PatientNr, Groep, Ind, Waarde)
-#  table(K36$Waarde)
+K36         <- left_join(Patient, podotherapeut, by="PatientNr") %>%
+                        mutate(     Groep  = scorekaart_name,
+                                    Ind    = "K3.6",
+                                    Waarde = ifelse(!is.na(aantal),1,0)) %>%
+  select(PatientNr, Groep, Ind, Waarde)
+  table(K36$Waarde)
 
 ###-------------------------------------------------------------------------------------------------------
 ###----------------------------------- K4 Labaanvragen -----------------------------------------------------
@@ -1207,7 +1071,7 @@ K351 <- left_join(Patient, fundus, by="PatientNr") %>%
 # Selecteer alle verrichtingen met zorgprofielklasse 8 - Kl. chemie en haematologie
 lab         <- Verrichting %>%
                         select(     PatientNr, ZACode, AGB_CodeAanvrager, Verrichtingdatum, ZorgprofielKlasse) %>%
-                        filter(     ZorgprofielKlasse=="0008" & AGB_CodeAanvrager=="0313" & (Verrichtingdatum>=startwindow & Verrichtingdatum<=stopwindow)) %>%
+                        filter(     ZorgprofielKlasse=="8" & AGB_CodeAanvrager=="0313" & (Verrichtingdatum>=startwindow & Verrichtingdatum<=stopwindow)) %>%
                         group_by(   PatientNr, Verrichtingdatum) %>%
                         summarise(  aantal_lab = n())
 
@@ -1234,34 +1098,34 @@ K41a         <- K41a %>%
 ###-------------------------------------------------------------------------------------------------------
 
 # Indicator P1.2 - Geannuleerde afspraken door patient bij de internist (Patient kan meerdere keren voorkomen)
-#P12         <- Afspraak %>%
-#                        filter((    Afdeling=="DIABETOLOGIE" | Afdeling=="INT") &
-#                                      (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) &
-#                                      (AfspraakCodeOms=="Spreekuurbezoek" | AfspraakCodeOms=="Tel consult" | AfspraakCodeOms=="Videoconsult") &
-#                                      (AfspraakStatus=="Geannuleerd" | AfspraakStatus=="Afgerond" | AfspraakStatus=="No-show") &
-#                                      (SpecialistTypeOms=="Medisch Specialist" | SpecialistTypeOms=="Verpleegkundig Specialist")) %>%
-#                        mutate(     Groep  = scorekaart_name,
-#                                    Ind    = "P1.2",
-#                                    Waarde = ifelse((AfspraakStatus=="Geannuleerd" & AnnuleringsReden=="Patient"),1,0)) %>%
-#  select(PatientNr, Groep, Ind, Waarde)
-#  table(P12$Waarde)
+P12         <- Afspraak %>%
+                        filter((    Afdeling=="DIABETOLOGIE" | Afdeling=="INT") &
+                                      (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) &
+                                      (AfspraakCodeOms=="Spreekuurbezoek" | AfspraakCodeOms=="Tel consult" | AfspraakCodeOms=="Videoconsult") &
+                                      (AfspraakStatus=="Geannuleerd" | AfspraakStatus=="Afgerond" | AfspraakStatus=="No-show") &
+                                      (SpecialistTypeOms=="Medisch Specialist" | SpecialistTypeOms=="Verpleegkundig Specialist")) %>%
+                        mutate(     Groep  = scorekaart_name,
+                                    Ind    = "P1.2",
+                                    Waarde = ifelse((AfspraakStatus=="Geannuleerd" & AnnuleringsReden=="Patient"),1,0)) %>%
+  select(PatientNr, Groep, Ind, Waarde)
+  table(P12$Waarde)
 
 # Indicator P1.2.1 - Aantal dagen van annulering tot nieuwe afspraak
-#P121        <- Afspraak %>%
-#                        filter((    Afdeling=="DIABETOLOGIE" | Afdeling=="INT") &
-#                                    (AfspraakCodeOms=="Spreekuurbezoek" | AfspraakCodeOms=="Tel consult" | AfspraakCodeOms=="Videoconsult") &
-#                                    (((AfspraakStatus=="Geanuleerd" & AnnuleringsReden=="Patient") & (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow)) |
-#                                    ((AfspraakStatus=="Geannuleerd" | AfspraakStatus=="Afgerond" | AfspraakStatus=="No-show") & (AfspraakDatum>=startwindow & AfspraakDatum<=Eind_FU))) &
-#                                    (SpecialistTypeOms=="Medisch Specialist" | SpecialistTypeOms=="Verpleegkundig Specialist")) %>%
-#                        mutate(     annuleren=ifelse(((AfspraakStatus=="Geannuleerd" & AnnuleringsReden=="Patient") & (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow)),1,0)) %>%
-#                        group_by(   PatientNr) %>%
-#                        arrange(    PatientNr, AfspraakDatum) %>%
-#                        mutate(     Groep  = scorekaart_name,
-#                                    Ind    = "P1.2.1",
-#                                    Waarde = as.numeric(c(difftime(tail(AfspraakDatum, -1), head(AfspraakDatum, -1),units = "days"),0))) %>%
-#                        filter(     annuleren==1 & Waarde>0) %>%
-#  select(PatientNr, Groep, Ind, Waarde)
-#  summary(P121$Waarde)
+P121        <- Afspraak %>%
+                        filter((    Afdeling=="DIABETOLOGIE" | Afdeling=="INT") &
+                                    (AfspraakCodeOms=="Spreekuurbezoek" | AfspraakCodeOms=="Tel consult" | AfspraakCodeOms=="Videoconsult") &
+                                    (((AfspraakStatus=="Geanuleerd" & AnnuleringsReden=="Patient") & (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow)) |
+                                    ((AfspraakStatus=="Geannuleerd" | AfspraakStatus=="Afgerond" | AfspraakStatus=="No-show") & (AfspraakDatum>=startwindow & AfspraakDatum<=Eind_FU))) &
+                                    (SpecialistTypeOms=="Medisch Specialist" | SpecialistTypeOms=="Verpleegkundig Specialist")) %>%
+                        mutate(     annuleren=ifelse(((AfspraakStatus=="Geannuleerd" & AnnuleringsReden=="Patient") & (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow)),1,0)) %>%
+                        group_by(   PatientNr) %>%
+                        arrange(    PatientNr, AfspraakDatum) %>%
+                        mutate(     Groep  = scorekaart_name,
+                                    Ind    = "P1.2.1",
+                                    Waarde = as.numeric(c(difftime(tail(AfspraakDatum, -1), head(AfspraakDatum, -1),units = "days"),0))) %>%
+                        filter(     annuleren==1 & Waarde>0) %>%
+  select(PatientNr, Groep, Ind, Waarde)
+  summary(P121$Waarde)
 
 ###-------------------------------------------------------------------------------------------------------
 ###----------------------------------- P2 No shows ---------------------------------------------------------
@@ -1269,38 +1133,36 @@ K41a         <- K41a %>%
 
 # Indicator P2.1 - % No shows bij internist
 P21a         <- Afspraak %>%
-                  filter((Afdeling=="JT POLI INTERNE GENEESKUNDE" | Afdeling=="OP POLI INTERNE GENEESKUNDE" | Afdeling=="JT POLI DIABOSS") &
-                          (AfspraakCodeOms=="Afspraak" | AfspraakCodeOms=="Spreekuurbezoek") &
-                          (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) & 
-                          (SpecialistTypeOms=="Arts" | SpecialistTypeOms=="Arts in opleiding" | SpecialistTypeOms=="Verpleegkundig specialist") &
-                          (AfspraakStatus=="No-show" | AfspraakStatus=="Afgerond")) %>%
-                  mutate(     Groep  = scorekaart_name,
-                              Ind    = "P2.1a",
-                              Waarde=ifelse((AfspraakStatus=="No-show"),1,0)) %>%
-                  select(PatientNr, Groep, Ind, Waarde)
-                  table(P21a$Waarde)
+                        filter((    Afdeling=="DIABETOLOGIE" | Afdeling=="INT") &
+                                      (AfspraakCodeOms=="Spreekuurbezoek") &
+                                      (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) &
+                                      (SpecialistTypeOms=="Medisch Specialist" | SpecialistTypeOms=="Verpleegkundig Specialist") &
+                                      (AfspraakStatus=="No-show" | AfspraakStatus=="Afgerond")) %>%
+                        mutate(     Groep  = scorekaart_name,
+                                    Ind    = "P2.1a",
+                                    Waarde=ifelse((AfspraakStatus=="No-show"),1,0)) %>%
+  select(PatientNr, Groep, Ind, Waarde)
+  table(P21a$Waarde)
 
 # Indicator P2.1 - % No shows bij diabetes verpleegkundige
 P22         <- Afspraak %>%
-                filter((Afdeling=="JT POLI INTERNE GENEESKUNDE" | Afdeling=="OP POLI INTERNE GENEESKUNDE" | Afdeling=="JT POLI DIABOSS") &
-                        (AfspraakCodeOms=="Afspraak" | AfspraakCodeOms=="Spreekuurbezoek") &
-                        (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) &
-                        (SpecialistTypeOms=="Verpleegkundige" | SpecialistTypeOms=="Verpleegkundige mob") &
-                        (AfspraakStatus=="No-show" | AfspraakStatus=="Afgerond")) %>%
-                mutate(     Groep  = scorekaart_name,
-                            Ind    = "P2.2",
-                            Waarde=ifelse((AfspraakStatus=="No-show"),1,0)) %>%
-                select(PatientNr, Groep, Ind, Waarde)
-                table(P22$Waarde)
+                        filter((    Afdeling=="DIABETOLOGIE" | Afdeling=="INT") &
+                                      (AfspraakCodeOms=="Spreekuurbezoek") &
+                                      (AfspraakDatum>=startwindow & AfspraakDatum<=stopwindow) &
+                                      (SpecialistTypeOms=="Verpleegkundige") &
+                                      (AfspraakStatus=="No-show" | AfspraakStatus=="Afgerond")) %>%
+                        mutate(     Groep  = scorekaart_name,
+                                    Ind    = "P2.2",
+                                    Waarde=ifelse((AfspraakStatus=="No-show"),1,0)) %>%
+  select(PatientNr, Groep, Ind, Waarde)
+  table(P22$Waarde)
 
 ###-------------------------------------------------------------------------------------------------------
 ###----------------------------------- P3 Lost to follow up ------------------------------------------------
 ###-------------------------------------------------------------------------------------------------------
   
-PatientSelectie_C3 <- read.xlsx("//olvg.nl/dfs/Groups02/5125/Concernstaf/1. Kwaliteit & veiligheid/4 Transparantie/VBHC/VBHC_data/Diabetes/Cyclus 3/Data/Bron_bestand_diabetes_C3.xlsx", sheet = "PatientSelectie")
-  
 # Lost-to-follow-up is o.b.v. DM1 patienten uit voorgaande cyclus die vervolgens twee jaar geen diabetes DBC hebben 
-PatientSelectie_C3 <- PatientSelectie_C3 %>%
+PatientSelectie_voorgaandjaar <- PatientSelectie_bron %>%
                                   filter(Cyclus == "C3") %>%
                                   filter(Groep == 1 &
                                             (TypeDM == "Type 1" | TypeDM == "LADA"))
@@ -1314,12 +1176,11 @@ DBC_LTFU <- Subtraject_bron %>%
                 filter(DiagnoseCode %in% c("221", "222", "223")) %>%
                 distinct(PatientNr)
   
-LTFU <- PatientSelectie_C3 %>%
+LTFU <- PatientSelectie_voorgaandjaar %>%
                 filter(!(PatientNr %in% DBC_LTFU$PatientNr))
 
 # D.m.v. dossieronderzoek achterhalen welke patienten lost-to-follow-up zijn
-#write.xlsx(LTFU, "LTFU.xlsx")
-write.xlsx(LTFU, "//olvg.nl/dfs/Groups02/5125/Concernstaf/1. Kwaliteit & veiligheid/4 Transparantie/VBHC/VBHC_data/Diabetes/Cyclus 5/Data/LTFU_C3.xlsx")
+write.xlsx(LTFU, "LTFU.xlsx")
 
 ###-------------------------------------------------------------------------------------------------------
 ###----------------------------------- P4 Moment van labafname ---------------------------------------------
@@ -1372,28 +1233,26 @@ na_consult  <- left_join(consulten_int, jaarlab, by="PatientNr") %>%
 
 noemer_P42  <- sum(consulten_int$Aantal)
 teller_P42  <- sum(na_consult$week)
- 
+
 ##----------------------------------------------------------------------------------------------------
 ##------------------------------------ OPSLAAN DATA ----------------------------------------------------
 ##----------------------------------------------------------------------------------------------------
 
 # Invullen met diabetes casemix
-case_mix   <- as.data.frame( rbind(lft, gsl, bmi, etn, diagnose, rok, retino, ther, pomp, rtcgm, fgm, combi, HbA1c)) %>%
+case_mix   <- as.data.frame( rbind(lft, gsl, bmi, diagnose, rok, alc, retino, ther, pomp, rtgcm, fgm, combi, HbA1c)) %>%
   mutate(Wegingsfactor=1,
          Aandoening    =  "Diabetes", 
          Cyclus        =  Cyclus_nr)
 
 # Invullen met diabetes indicatoren
-Indicatoren <- as.data.frame( rbind(U12, U211a, U212a, U221a, U33, U41a, U47, U49a, U4101a, U4102a, U412, U51, 
-                                    K22a, K23a, K31, K311, K312, K32, K321, K322, K33, K34, K35a, K351, K41a,
-                                    P21a, P22, P41)) %>%
+Indicatoren <- as.data.frame( rbind(U11, U12, U211a, U212a, U221a, U33, U34, U41a, U42a, U47, U49a, U4101a, U4102a, U412, U51,
+                                    K21b, K22a, K23a, K31, K311, K312, K32, K321, K322, K33, K34, K35a, K351, K36, K41a,
+                                    P12, P121, P21a, P22, P41)) %>%
   mutate(Wegingsfactor=1,
          Aandoening    =  "Diabetes", 
          Cyclus        =  Cyclus_nr)
 
 OutputDataSet <- rbind(case_mix, Indicatoren)
-
-df_wide <- OutputDataSet %>% pivot_wider(names_from = Ind, values_from = Waarde)
 
 # Save indicatoren to R-file
 save(OutputDataSet, file = paste0("OutputDataSet_", as.character(Cyclus_nr), ".rda") )
@@ -1402,7 +1261,9 @@ write.xlsx(OutputDataSet, paste0("OutputDataSet_", as.character(Cyclus_nr), ".xl
 #LET OP: handmatige indicatoren     U3.1 Ketoacidose
 #                                   U3.2 Hypo
 #                                   HbA1c tabel
-#                                   K2.1b Verblijfsduur per opname
 #                                   K2.2 Verblijfsduur IC gerelateerd aan diabetes
 #                                   P3 Lost-to-follow-up
 #                                   P4.2 Moment van lab prikken
+
+
+x <- HbA1c_cm %>% left_join (ther) %>% distinct() %>% select()
